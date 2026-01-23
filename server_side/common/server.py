@@ -1,5 +1,6 @@
 # non-blocking server for seller interface
 import logging
+import os
 import socket
 import sys
 from pathlib import Path
@@ -18,9 +19,18 @@ from server_side.common.protocol import (
     ServerProtocolError,
 )
 from server_side.common.transport import LengthPrefixedJSONConnection
+from server_side.data_access_layer.db import Database_Connection
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _safe_close(resource):
+    if resource:
+        try:
+            resource.close()
+        except Exception:
+            pass
 
 
 class Server:
@@ -30,6 +40,11 @@ class Server:
         self.timeout = 1.0
         self._running = True
         self._setup()
+
+        self.db_conns = {
+            "customer": Database_Connection(os.getenv("CUSTOMER_DB_NAME", "customer-database")),
+            "product": Database_Connection(os.getenv("PRODUCT_DB_NAME", "product-database")),
+        }
 
     def _setup(self):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -41,10 +56,10 @@ class Server:
 
     def stop(self):
         self._running = False
-        try:
-            self.server_socket.close()
-        except Exception:
-            pass
+        _safe_close(self.server_socket)
+        # Close any registered DB connections/pools
+        for db in getattr(self, "db_conns", {}).values():
+            _safe_close(db)
 
     def start(self):
         try:

@@ -30,7 +30,7 @@ class SellerServer(Server):
             )
         
         handler = self.handlers.get(api)
-        response_payload = handler(request)
+        response_payload = handler(request, self.db_conns)
 
         return build_response(api=api, payload=response_payload, session_id=session_id)
     

@@ -1,8 +1,17 @@
+from pathlib import Path
+import sys
+
+# for `client_side.*` imports resolve
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from client_side.common.protocol import (
     build_request,
     extract_payload,
     ClientProtocolError
 )
+from client_side.common.tcp_client import TCPClient
 
 
 class SellerClient:
@@ -135,3 +144,10 @@ class SellerClient:
                 "NOT_LOGGED_IN",
                 "Seller must be logged in to perform this operation"
             )
+
+if __name__ == "__main__":
+    tcp = TCPClient('127.0.0.1', 8080)
+    client = SellerClient(tcp)
+
+    response = client.create_account("test_seller", "password123")
+    print(response)

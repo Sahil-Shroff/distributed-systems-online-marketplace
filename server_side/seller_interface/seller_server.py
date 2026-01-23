@@ -17,8 +17,7 @@ class SellerServer(Server):
         self.handlers = HANDLERS
 
     def process_request(self, request: Dict[str, Any]) -> Dict[str, Any]:
-        api = request["api"]
-        payload = request["payload"]
+        api = request.get("api")
         session_id = request.get("session_id")
 
         if api not in self.handlers:
@@ -31,6 +30,8 @@ class SellerServer(Server):
         
         handler = self.handlers.get(api)
         response_payload = handler(request, self.db_conns)
+
+        print("response_payload", response_payload)
 
         return build_response(api=api, payload=response_payload, session_id=session_id)
     

@@ -48,6 +48,7 @@ class SellerClient:
         data = extract_payload(resp)
 
         self.session_id = resp.get("session_id")
+        print(data, self.session_id)
         self.seller_id = data["seller_id"]
         return self.seller_id
 
@@ -149,5 +150,6 @@ if __name__ == "__main__":
     tcp = TCPClient('127.0.0.1', 8080)
     client = SellerClient(tcp)
 
-    response = client.create_account("test_seller", "password123")
-    print(response)
+    # response = client.create_account("test_seller", "password123")
+    login_response = client.login("test_seller", "password123")
+    print(login_response)

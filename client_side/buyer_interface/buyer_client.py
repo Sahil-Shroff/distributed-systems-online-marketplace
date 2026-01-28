@@ -1,8 +1,18 @@
+from pathlib import Path
+import sys
+import time
+
+# for `client_side.*` imports resolve
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from client_side.common.protocol import (
     build_request,
     extract_payload,
     ClientProtocolError
 )
+from client_side.common.tcp_client import TCPClient
 
 
 class BuyerClient:
@@ -40,7 +50,7 @@ class BuyerClient:
 
         self.session_id = resp.get("session_id")
         self.buyer_id = data["buyer_id"]
-        return self.buyer_id
+        return self.session_id
 
     def logout(self):
         self._require_session()
@@ -180,3 +190,58 @@ class BuyerClient:
                 "NOT_LOGGED_IN",
                 "Buyer must be logged in to perform this operation"
             )
+
+if __name__ == "__main__":
+    tcp = TCPClient("127.0.0.1", 8081)
+    client = BuyerClient(tcp)
+
+    username = f"buyer_{int(time.time())}"
+    password = "password123"
+
+    try:
+        try:
+            buyer_id = client.create_account(username, password)
+            print(f"Created buyer {buyer_id} (username={username})")
+        except ClientProtocolError:
+            print(f"Account {username} exists, logging in...")
+
+        session_id = client.login(username, password)
+        print(f"Logged in. session_id={session_id}")
+
+        # Search items (category 0 with keywords)
+        items = client.search_items(category=0, keywords=["dell", "i7"])
+        print("SearchItemsForSale:", items)
+
+        test_item_id = None
+        if items:
+            test_item_id = items[0]["item_id"]
+            item_details = client.get_item(test_item_id)
+            print("GetItem:", item_details)
+
+            # Cart operations
+            client.add_item_to_cart(test_item_id, 4)
+            print("Added to cart:", client.display_cart())
+
+            client.remove_item_from_cart(test_item_id, 1)
+            print("Removed from cart:", client.display_cart())
+
+            client.save_cart()
+            # client.clear_cart()
+            print("Cart after clear:", client.display_cart())
+
+            # Feedback
+            client.provide_feedback(test_item_id, thumbs_up=True)
+            # Get seller rating of the item’s seller
+            seller_id = item_details.get("seller_id")
+            if seller_id:
+                rating = client.get_seller_rating(seller_id)
+                print("Seller rating:", rating)
+
+        # Purchase history
+        history = client.get_purchase_history()
+        print("Purchase history:", history)
+
+        client.logout()
+        print("Logged out.")
+    finally:
+        tcp.close()

@@ -109,6 +109,10 @@ def handle_logout(request: Dict[str, Any], dbs: Dict[str, Database_Connection]) 
         return {"status": "success"} # Session already deleted
 
     user_id, role = rows[0]
+    if isinstance(role, memoryview):
+        role = role.tobytes()
+    if isinstance(role, bytes):
+        role = role.decode("utf-8")
     if role != "seller":
         raise ValueError("invalid role for logout")
 
@@ -117,8 +121,25 @@ def handle_logout(request: Dict[str, Any], dbs: Dict[str, Database_Connection]) 
 
 
 def handle_get_seller_rating(request: Dict[str, Any], dbs: Dict[str, Database_Connection]) -> Dict[str, Any]:
-    # TODO: implement rating retrieval
-    return {"status": "success", "note": "GetSellerRating not yet implemented"}
+    session_id = request.get("session_id")
+    seller_id = _require_seller_session(dbs, session_id)
+
+    customer_db = _get_db(dbs, "customer")
+    rows = customer_db.execute(
+        "SELECT seller_feedback FROM sellers WHERE seller_id = %s",
+        (seller_id,),
+        fetch=True,
+    )
+    rating = None
+    if rows:
+        feedback = rows[0][0]
+        if feedback is not None and len(feedback) >= 2:
+            pos, neg = feedback[0], feedback[1]
+            total = pos + neg
+            if total > 0:
+                rating = pos / total
+
+    return {"rating": rating}
 
 
 def _require_seller_session(dbs: Dict[str, Database_Connection], session_id: str) -> int:
@@ -133,6 +154,10 @@ def _require_seller_session(dbs: Dict[str, Database_Connection], session_id: str
     if not rows:
         raise ValueError("invalid session")
     user_id, role = rows[0]
+    if isinstance(role, memoryview):
+        role = role.tobytes()
+    if isinstance(role, bytes):
+        role = role.decode("utf-8")
     if role != "seller":
         raise ValueError("invalid role for this operation")
     return user_id
@@ -140,8 +165,9 @@ def _require_seller_session(dbs: Dict[str, Database_Connection], session_id: str
 
 def handle_register_item_for_sale(request: Dict[str, Any], dbs: Dict[str, Database_Connection]) -> Dict[str, Any]:
     payload = request.get("payload", {})
-    _require_fields(payload, ("item_name", "price", "quantity"))
+    _require_fields(payload, ("item_name", "category", "price", "quantity"))
     item_name = payload["item_name"]
+    category = payload["category"]
     keywords = payload.get("keywords", [])
     condition = (payload.get("condition") or "").lower()
     price = payload["price"]
@@ -158,11 +184,11 @@ def handle_register_item_for_sale(request: Dict[str, Any], dbs: Dict[str, Databa
 
     rows = product_db.execute(
         """
-        INSERT INTO items (item_name, keywords, condition_is_new, sale_price, quantity, seller_id)
-        VALUES (%s, %s, %s, %s, %s, %s)
+        INSERT INTO items (item_name, category, keywords, condition_is_new, sale_price, quantity, seller_id)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
         RETURNING item_id
         """,
-        (item_name, keywords, condition_is_new, price, quantity, seller_id),
+        (item_name, category, keywords, condition_is_new, price, quantity, seller_id),
         fetch=True,
     )
 
@@ -231,7 +257,7 @@ def handle_display_items_for_sale(request: Dict[str, Any], dbs: Dict[str, Databa
     product_db = _get_db(dbs, "product")
 
     rows = product_db.execute(
-        "SELECT item_id, item_name, keywords, condition_is_new, sale_price, quantity FROM items WHERE seller_id = %s",
+        "SELECT item_id, item_name, category, keywords, condition_is_new, sale_price, quantity FROM items WHERE seller_id = %s",
         (seller_id,),
         fetch=True,
     ) or []
@@ -240,10 +266,11 @@ def handle_display_items_for_sale(request: Dict[str, Any], dbs: Dict[str, Databa
         {
             "item_id": r[0],
             "item_name": r[1],
-            "keywords": r[2],
-            "condition_is_new": r[3],
-            "price": float(r[4]) if r[4] is not None else None,
-            "quantity": r[5],
+            "category": r[2],
+            "keywords": r[3],
+            "condition_is_new": r[4],
+            "price": float(r[5]) if r[5] is not None else None,
+            "quantity": r[6],
         }
         for r in rows
     ]

@@ -30,7 +30,7 @@ class BuyerServer(Server):
         
         handler = self.handlers.get(api)
         response_payload = handler(request, self.db_conns)
-
+        session_id = response_payload.get("session_id")
         print("response_payload", response_payload)
 
         return build_response(api=api, payload=response_payload, session_id=session_id)
@@ -38,7 +38,7 @@ class BuyerServer(Server):
 
 if __name__ == "__main__":
     HOST = "127.0.0.1"
-    PORT = 8080
+    PORT = 8081
     server = BuyerServer(HOST, PORT)
     try:
         server.start()

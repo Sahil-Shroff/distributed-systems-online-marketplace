@@ -74,7 +74,7 @@ def search_items(product_db: Database_Connection, category: Any = None, keywords
         params.append(keywords[0])
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     return product_db.execute(
-        f"SELECT item_id, item_name, keywords, condition_is_new, sale_price, quantity, seller_id FROM items {where}",
+        f"SELECT item_id, item_name, category, keywords, condition_is_new, sale_price, quantity, seller_id FROM items {where}",
         tuple(params),
         fetch=True,
     ) or []
@@ -82,7 +82,7 @@ def search_items(product_db: Database_Connection, category: Any = None, keywords
 
 def get_item(product_db: Database_Connection, item_id: Any):
     row = product_db.execute(
-        "SELECT item_id, item_name, keywords, condition_is_new, sale_price, quantity, seller_id FROM items WHERE item_id = %s",
+        "SELECT item_id, item_name, category, keywords, condition_is_new, sale_price, quantity, seller_id FROM items WHERE item_id = %s",
         (item_id,),
         fetch=True,
     )
@@ -100,8 +100,8 @@ def get_item_stock(product_db: Database_Connection, item_id: Any) -> Optional[in
 
 # ---------- Cart ----------
 
-def add_item_to_cart(customer_db: Database_Connection, buyer_id: int, item_id: Any, qty: int):
-    customer_db.execute(
+def add_item_to_cart(product_db: Database_Connection, buyer_id: int, item_id: Any, qty: int):
+    product_db.execute(
         """
         INSERT INTO cart_items (buyer_id, item_id, quantity)
         VALUES (%s, %s, %s)
@@ -112,8 +112,8 @@ def add_item_to_cart(customer_db: Database_Connection, buyer_id: int, item_id: A
     )
 
 
-def get_cart_item_quantity(customer_db: Database_Connection, buyer_id: int, item_id: Any) -> Optional[int]:
-    row = customer_db.execute(
+def get_cart_item_quantity(product_db: Database_Connection, buyer_id: int, item_id: Any) -> Optional[int]:
+    row = product_db.execute(
         "SELECT quantity FROM cart_items WHERE buyer_id = %s AND item_id = %s",
         (buyer_id, item_id),
         fetch=True,
@@ -121,31 +121,31 @@ def get_cart_item_quantity(customer_db: Database_Connection, buyer_id: int, item
     return row[0][0] if row else None
 
 
-def update_cart_item(customer_db: Database_Connection, buyer_id: int, item_id: Any, new_qty: int):
+def update_cart_item(product_db: Database_Connection, buyer_id: int, item_id: Any, new_qty: int):
     if new_qty <= 0:
-        customer_db.execute(
+        product_db.execute(
             "DELETE FROM cart_items WHERE buyer_id = %s AND item_id = %s",
             (buyer_id, item_id),
             fetch=False,
         )
     else:
-        customer_db.execute(
+        product_db.execute(
             "UPDATE cart_items SET quantity = %s WHERE buyer_id = %s AND item_id = %s",
             (new_qty, buyer_id, item_id),
             fetch=False,
         )
 
 
-def clear_cart(customer_db: Database_Connection, buyer_id: int):
-    customer_db.execute(
+def clear_cart(product_db: Database_Connection, buyer_id: int):
+    product_db.execute(
         "DELETE FROM cart_items WHERE buyer_id = %s",
         (buyer_id,),
         fetch=False,
     )
 
 
-def list_cart(customer_db: Database_Connection, buyer_id: int):
-    return customer_db.execute(
+def list_cart(product_db: Database_Connection, buyer_id: int):
+    return product_db.execute(
         "SELECT item_id, quantity FROM cart_items WHERE buyer_id = %s",
         (buyer_id,),
         fetch=True,
@@ -154,27 +154,51 @@ def list_cart(customer_db: Database_Connection, buyer_id: int):
 
 # ---------- Feedback / Rating ----------
 
-def provide_feedback(product_db: Database_Connection, item_id: Any, buyer_id: int, is_positive: bool):
-    product_db.execute(
-        "INSERT INTO item_feedback (item_id, buyer_id, is_positive) VALUES (%s, %s, %s)",
-        (item_id, buyer_id, is_positive),
+def provide_feedback(product_db: Database_Connection, customer_db: Database_Connection, item_id: Any, buyer_id: int, is_positive: bool):
+    # Find seller_id for the item
+    row = product_db.execute(
+        "SELECT seller_id FROM items WHERE item_id = %s",
+        (item_id,),
+        fetch=True,
+    )
+    if not row:
+        raise ValueError("item not found")
+    seller_id = row[0][0]
+
+    # Update aggregated seller_feedback array: [positive_count, negative_count]
+    customer_db.execute(
+        """
+        UPDATE sellers
+        SET seller_feedback = ARRAY[
+            COALESCE(seller_feedback[1], 0) + CASE WHEN %s THEN 1 ELSE 0 END,
+            COALESCE(seller_feedback[2], 0) + CASE WHEN %s THEN 0 ELSE 1 END
+        ]
+        WHERE seller_id = %s
+        """,
+        (is_positive, is_positive, seller_id),
         fetch=False,
     )
 
 
-def seller_rating(product_db: Database_Connection, seller_id: int):
-    row = product_db.execute(
-        "SELECT AVG(CASE WHEN is_positive THEN 1 ELSE 0 END) FROM item_feedback f JOIN items i ON f.item_id = i.item_id WHERE i.seller_id = %s",
+def seller_feedback_counts(customer_db: Database_Connection, seller_id: int):
+    row = customer_db.execute(
+        "SELECT seller_feedback FROM sellers WHERE seller_id = %s",
         (seller_id,),
         fetch=True,
     )
-    return float(row[0][0]) if row and row[0][0] is not None else None
+    if not row:
+        return None
+    feedback = row[0][0]  # expected int[]
+    if feedback is None or len(feedback) < 2:
+        return None
+    pos, neg = feedback[0], feedback[1]
+    return {"pos": pos, "neg": neg}
 
 
 # ---------- Purchases ----------
 
-def buyer_purchases(customer_db: Database_Connection, buyer_id: int):
-    return customer_db.execute(
+def buyer_purchases(product_db: Database_Connection, buyer_id: int):
+    return product_db.execute(
         "SELECT item_id, quantity, purchased_at FROM purchases WHERE buyer_id = %s ORDER BY purchased_at DESC",
         (buyer_id,),
         fetch=True,

@@ -1,5 +1,7 @@
 from pathlib import Path
 import sys
+import time
+import random
 
 # for `client_side.*` imports resolve
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -50,7 +52,7 @@ class SellerClient:
         self.session_id = resp.get("session_id")
         print(data, self.session_id)
         self.seller_id = data["seller_id"]
-        return self.seller_id
+        return self.session_id
 
     def logout(self):
         self._require_session()
@@ -147,9 +149,55 @@ class SellerClient:
             )
 
 if __name__ == "__main__":
-    tcp = TCPClient('127.0.0.1', 8080)
+    tcp = TCPClient("127.0.0.1", 8080)
     client = SellerClient(tcp)
 
-    # response = client.create_account("test_seller", "password123")
-    login_response = client.login("test_seller", "password123")
-    print(login_response)
+    username = f"seller_{int(time.time())}"
+    password = "password123"
+
+    try:
+        try:
+            seller_id = client.create_account(username, password)
+            print(f"Created seller {seller_id} (username={username})")
+        except ClientProtocolError:
+            # If account exists, fall back to login
+            print(f"Account {username} exists, logging in...")
+
+        session_id = client.login(username, password)
+        print(f"Logged in. session_id={session_id}")
+
+        # Register an item
+        item_id = client.register_item_for_sale(
+            item_name="Laptop",
+            category=3,
+            keywords=["dell", "i7"],
+            condition="New",
+            price=799.99,
+            quantity=5,
+        )
+        print(f"Registered item_id={item_id}")
+
+        # Change price
+        new_price = 749.99
+        client.change_item_price(item_id, new_price)
+        print(f"Updated price to {new_price}")
+
+        # Update units (decrease by 1)
+        client.update_units_for_sale(item_id, -1)
+        print("Decreased quantity by 1")
+
+        # Display items
+        items = client.display_items_for_sale()
+        print("Items for sale:", items)
+
+        # Seller rating (may be unimplemented on server)
+        try:
+            rating = client.get_seller_rating()
+            print("Seller rating:", rating)
+        except ClientProtocolError as e:
+            print("GetSellerRating not implemented:", e)
+
+        client.logout()
+        print("Logged out.")
+    finally:
+        tcp.close()

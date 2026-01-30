@@ -23,7 +23,7 @@ class Database_Connection:
     def _connect(self):
         self.DB_POOL = SimpleConnectionPool(
             minconn=1,
-            maxconn=5,
+            maxconn=15,
             host=self.host,
             port=self.port,
             dbname=self.db_name,

@@ -176,7 +176,7 @@ def main():
     scenarios = [
         (1, 1),
         (10, 10),
-        # (100, 100),
+        (100, 100),
     ]
     for s, b in scenarios:
         result = run_scenario(s, b)

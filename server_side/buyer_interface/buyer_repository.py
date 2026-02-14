@@ -101,11 +101,14 @@ def get_item_stock(product_db: Database_Connection, item_id: Any) -> Optional[in
 # ---------- Cart ----------
 
 def add_item_to_cart(product_db: Database_Connection, buyer_id: int, item_id: Any, qty: int):
+    # Items added are initially "unsaved" (is_saved = FALSE)
+    # We use COALESCE and EXCLUDED to maintain quantity even if is_saved status changes
     product_db.execute(
         """
-        INSERT INTO cart_items (buyer_id, item_id, quantity)
-        VALUES (%s, %s, %s)
-        ON CONFLICT (buyer_id, item_id) DO UPDATE SET quantity = cart_items.quantity + EXCLUDED.quantity
+        INSERT INTO cart_items (buyer_id, item_id, quantity, is_saved)
+        VALUES (%s, %s, %s, FALSE)
+        ON CONFLICT (buyer_id, item_id) DO UPDATE 
+        SET quantity = cart_items.quantity + EXCLUDED.quantity
         """,
         (buyer_id, item_id, qty),
         fetch=False,
@@ -134,6 +137,22 @@ def update_cart_item(product_db: Database_Connection, buyer_id: int, item_id: An
             (new_qty, buyer_id, item_id),
             fetch=False,
         )
+
+
+def save_cart(product_db: Database_Connection, buyer_id: int):
+    product_db.execute(
+        "UPDATE cart_items SET is_saved = TRUE WHERE buyer_id = %s",
+        (buyer_id,),
+        fetch=False,
+    )
+
+
+def delete_unsaved_cart(product_db: Database_Connection, buyer_id: int):
+    product_db.execute(
+        "DELETE FROM cart_items WHERE buyer_id = %s AND is_saved = FALSE",
+        (buyer_id,),
+        fetch=False,
+    )
 
 
 def clear_cart(product_db: Database_Connection, buyer_id: int):

@@ -81,6 +81,9 @@ def handle_logout(request: Dict[str, Any], dbs: Dict[str, Database_Connection]) 
     if role != "buyer":
         raise ValueError("invalid role for logout")
 
+    product_db = _get_db(dbs, "product")
+    repo.delete_unsaved_cart(product_db, user_id)
+
     repo.delete_sessions(customer_db, session_id, user_id, role, LOGOUT_SCOPE)
     return {"status": "success", "scope": LOGOUT_SCOPE}
 
@@ -174,9 +177,10 @@ def handle_remove_item_from_cart(request: Dict[str, Any], dbs: Dict[str, Databas
 
 
 def handle_save_cart(request: Dict[str, Any], dbs: Dict[str, Database_Connection]) -> Dict[str, Any]:
-    # If cart_items persists in DB, this is effectively a no-op.
     session_id = request.get("session_id")
-    _require_buyer_session(dbs, session_id)
+    buyer_id = _require_buyer_session(dbs, session_id)
+    product_db = _get_db(dbs, "product")
+    repo.save_cart(product_db, buyer_id)
     return {"status": "success"}
 
 

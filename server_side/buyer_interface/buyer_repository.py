@@ -100,73 +100,85 @@ def get_item_stock(product_db: Database_Connection, item_id: Any) -> Optional[in
 
 # ---------- Cart ----------
 
-def add_item_to_cart(product_db: Database_Connection, buyer_id: int, item_id: Any, qty: int):
-    # Items added are initially "unsaved" (is_saved = FALSE)
-    # We use COALESCE and EXCLUDED to maintain quantity even if is_saved status changes
+def add_item_to_cart(product_db: Database_Connection, buyer_id: int, session_id: str, item_id: Any, qty: int):
     product_db.execute(
         """
-        INSERT INTO cart_items (buyer_id, item_id, quantity, is_saved)
-        VALUES (%s, %s, %s, FALSE)
-        ON CONFLICT (buyer_id, item_id) DO UPDATE 
+        INSERT INTO cart_items (buyer_id, session_id, item_id, quantity, is_saved)
+        VALUES (%s, %s, %s, %s, FALSE)
+        ON CONFLICT (buyer_id, session_id, item_id, is_saved) DO UPDATE
         SET quantity = cart_items.quantity + EXCLUDED.quantity
         """,
-        (buyer_id, item_id, qty),
+        (buyer_id, session_id, item_id, qty),
         fetch=False,
     )
 
 
-def get_cart_item_quantity(product_db: Database_Connection, buyer_id: int, item_id: Any) -> Optional[int]:
+def get_cart_item_quantity(product_db: Database_Connection, buyer_id: int, session_id: str, item_id: Any) -> Optional[int]:
     row = product_db.execute(
-        "SELECT quantity FROM cart_items WHERE buyer_id = %s AND item_id = %s",
-        (buyer_id, item_id),
+        "SELECT quantity FROM cart_items WHERE buyer_id = %s AND session_id = %s AND item_id = %s AND is_saved = FALSE",
+        (buyer_id, session_id, item_id),
         fetch=True,
     )
     return row[0][0] if row else None
 
 
-def update_cart_item(product_db: Database_Connection, buyer_id: int, item_id: Any, new_qty: int):
+def update_cart_item(product_db: Database_Connection, buyer_id: int, session_id: str, item_id: Any, new_qty: int):
     if new_qty <= 0:
         product_db.execute(
-            "DELETE FROM cart_items WHERE buyer_id = %s AND item_id = %s",
-            (buyer_id, item_id),
+            "DELETE FROM cart_items WHERE buyer_id = %s AND session_id = %s AND item_id = %s AND is_saved = FALSE",
+            (buyer_id, session_id, item_id),
             fetch=False,
         )
     else:
         product_db.execute(
-            "UPDATE cart_items SET quantity = %s WHERE buyer_id = %s AND item_id = %s",
-            (new_qty, buyer_id, item_id),
+            "UPDATE cart_items SET quantity = %s WHERE buyer_id = %s AND session_id = %s AND item_id = %s AND is_saved = FALSE",
+            (new_qty, buyer_id, session_id, item_id),
             fetch=False,
         )
 
 
-def save_cart(product_db: Database_Connection, buyer_id: int):
+def save_cart(product_db: Database_Connection, buyer_id: int, session_id: str):
+    # Move session cart (is_saved=FALSE) into saved bucket (session_id='', is_saved=TRUE)
     product_db.execute(
-        "UPDATE cart_items SET is_saved = TRUE WHERE buyer_id = %s",
-        (buyer_id,),
+        """
+        INSERT INTO cart_items (buyer_id, session_id, item_id, quantity, is_saved)
+        SELECT buyer_id, '', item_id, quantity, TRUE
+        FROM cart_items
+        WHERE buyer_id = %s AND session_id = %s AND is_saved = FALSE
+        ON CONFLICT (buyer_id, session_id, item_id, is_saved)
+        DO UPDATE SET quantity = cart_items.quantity + EXCLUDED.quantity
+        """,
+        (buyer_id, session_id),
+        fetch=False,
+    )
+    # Clear the session cart
+    product_db.execute(
+        "DELETE FROM cart_items WHERE buyer_id = %s AND session_id = %s AND is_saved = FALSE",
+        (buyer_id, session_id),
         fetch=False,
     )
 
 
-def delete_unsaved_cart(product_db: Database_Connection, buyer_id: int):
+def delete_unsaved_cart(product_db: Database_Connection, buyer_id: int, session_id: str):
     product_db.execute(
-        "DELETE FROM cart_items WHERE buyer_id = %s AND is_saved = FALSE",
-        (buyer_id,),
+        "DELETE FROM cart_items WHERE buyer_id = %s AND session_id = %s AND is_saved = FALSE",
+        (buyer_id, session_id),
         fetch=False,
     )
 
 
-def clear_cart(product_db: Database_Connection, buyer_id: int):
+def clear_cart(product_db: Database_Connection, buyer_id: int, session_id: str):
     product_db.execute(
-        "DELETE FROM cart_items WHERE buyer_id = %s",
-        (buyer_id,),
+        "DELETE FROM cart_items WHERE buyer_id = %s AND session_id = %s AND is_saved = FALSE",
+        (buyer_id, session_id),
         fetch=False,
     )
 
 
-def list_cart(product_db: Database_Connection, buyer_id: int):
+def list_cart(product_db: Database_Connection, buyer_id: int, session_id: str):
     return product_db.execute(
-        "SELECT item_id, quantity FROM cart_items WHERE buyer_id = %s",
-        (buyer_id,),
+        "SELECT item_id, quantity FROM cart_items WHERE buyer_id = %s AND session_id = %s AND is_saved = FALSE",
+        (buyer_id, session_id),
         fetch=True,
     ) or []
 

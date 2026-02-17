@@ -199,17 +199,17 @@ if __name__ == "__main__":
     password = "password123"
 
     try:
-        try:
-            buyer_id = client.create_account(username, password)
-            print(f"Created buyer {buyer_id} (username={username})")
-        except ClientProtocolError:
-            print(f"Account {username} exists, logging in...")
+        # try:
+        #     buyer_id = client.create_account(username, password)
+        #     print(f"Created buyer {buyer_id} (username={username})")
+        # except ClientProtocolError:
+        #     print(f"Account {username} exists, logging in...")
 
-        session_id = client.login(username, password)
+        session_id = client.login("buyer_1770342938", password)
         print(f"Logged in. session_id={session_id}")
 
         # Search items (category 0 with keywords)
-        items = client.search_items(category=0, keywords=["dell", "i7"])
+        items = client.search_items(category=3, keywords=["dell", "i5"])
         print("SearchItemsForSale:", items)
 
         test_item_id = None
@@ -219,29 +219,12 @@ if __name__ == "__main__":
             print("GetItem:", item_details)
 
             # Cart operations
-            client.add_item_to_cart(test_item_id, 4)
+            client.add_item_to_cart(test_item_id, 1)
             print("Added to cart:", client.display_cart())
+            
 
-            client.remove_item_from_cart(test_item_id, 1)
-            print("Removed from cart:", client.display_cart())
 
-            client.save_cart()
-            # client.clear_cart()
-            print("Cart after clear:", client.display_cart())
-
-            # Feedback
-            client.provide_feedback(test_item_id, thumbs_up=True)
-            # Get seller rating of the item’s seller
-            seller_id = item_details.get("seller_id")
-            if seller_id:
-                rating = client.get_seller_rating(seller_id)
-                print("Seller rating:", rating)
-
-        # Purchase history
-        history = client.get_purchase_history()
-        print("Purchase history:", history)
-
-        client.logout()
-        print("Logged out.")
+        # client.logout()
+        # print("Logged out.")
     finally:
         tcp.close()

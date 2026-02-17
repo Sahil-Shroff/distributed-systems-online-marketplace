@@ -75,8 +75,8 @@ def main():
 
             elif cmd == "login":
                 username, password = args
-                buyer_id = client.login(username, password)
-                print(f"Logged in. Buyer ID: {buyer_id}")
+                session_id = client.login(username, password)
+                print(f"Logged in. Session ID: {session_id}")
 
             elif cmd == "logout":
                 client.logout()

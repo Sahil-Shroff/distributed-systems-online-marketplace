@@ -82,7 +82,7 @@ def handle_logout(request: Dict[str, Any], dbs: Dict[str, Database_Connection]) 
         raise ValueError("invalid role for logout")
 
     product_db = _get_db(dbs, "product")
-    repo.delete_unsaved_cart(product_db, user_id)
+    repo.delete_unsaved_cart(product_db, user_id, session_id)
 
     repo.delete_sessions(customer_db, session_id, user_id, role, LOGOUT_SCOPE)
     return {"status": "success", "scope": LOGOUT_SCOPE}
@@ -147,6 +147,7 @@ def handle_add_item_to_cart(request: Dict[str, Any], dbs: Dict[str, Database_Con
     qty = payload["quantity"]
     session_id = request.get("session_id")
     buyer_id = _require_buyer_session(dbs, session_id)
+    session_id_str = str(session_id)
 
     product_db = _get_db(dbs, "product")
     available = repo.get_item_stock(product_db, item_id)
@@ -155,7 +156,7 @@ def handle_add_item_to_cart(request: Dict[str, Any], dbs: Dict[str, Database_Con
     if qty > available:
         raise ValueError("ITEM_OUT_OF_STOCK")
 
-    repo.add_item_to_cart(product_db, buyer_id, item_id, qty)
+    repo.add_item_to_cart(product_db, buyer_id, session_id_str, item_id, qty)
     return {"status": "success"}
 
 
@@ -166,37 +167,41 @@ def handle_remove_item_from_cart(request: Dict[str, Any], dbs: Dict[str, Databas
     qty = payload["quantity"]
     session_id = request.get("session_id")
     buyer_id = _require_buyer_session(dbs, session_id)
+    session_id_str = str(session_id)
 
     product_db = _get_db(dbs, "product")
-    current = repo.get_cart_item_quantity(product_db, buyer_id, item_id)
+    current = repo.get_cart_item_quantity(product_db, buyer_id, session_id_str, item_id)
     if current is None:
         raise ValueError("item not in cart")
     new_qty = current - qty
-    repo.update_cart_item(product_db, buyer_id, item_id, new_qty)
+    repo.update_cart_item(product_db, buyer_id, session_id_str, item_id, new_qty)
     return {"status": "success", "quantity": max(new_qty, 0)}
 
 
 def handle_save_cart(request: Dict[str, Any], dbs: Dict[str, Database_Connection]) -> Dict[str, Any]:
     session_id = request.get("session_id")
     buyer_id = _require_buyer_session(dbs, session_id)
+    session_id_str = str(session_id)
     product_db = _get_db(dbs, "product")
-    repo.save_cart(product_db, buyer_id)
+    repo.save_cart(product_db, buyer_id, session_id_str)
     return {"status": "success"}
 
 
 def handle_clear_cart(request: Dict[str, Any], dbs: Dict[str, Database_Connection]) -> Dict[str, Any]:
     session_id = request.get("session_id")
     buyer_id = _require_buyer_session(dbs, session_id)
+    session_id_str = str(session_id)
     product_db = _get_db(dbs, "product")
-    repo.clear_cart(product_db, buyer_id)
+    repo.clear_cart(product_db, buyer_id, session_id_str)
     return {"status": "success"}
 
 
 def handle_display_cart(request: Dict[str, Any], dbs: Dict[str, Database_Connection]) -> Dict[str, Any]:
     session_id = request.get("session_id")
     buyer_id = _require_buyer_session(dbs, session_id)
+    session_id_str = str(session_id)
     product_db = _get_db(dbs, "product")
-    rows = repo.list_cart(product_db, buyer_id)
+    rows = repo.list_cart(product_db, buyer_id, session_id_str)
     items = [{"item_id": r[0], "quantity": r[1]} for r in rows]
     return {"cart": items}
 

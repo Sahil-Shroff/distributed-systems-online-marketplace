@@ -146,21 +146,36 @@ def _require_seller_session(dbs: Dict[str, Database_Connection], session_id: str
     if not session_id:
         raise ValueError("session_id required")
     customer_db = _get_db(dbs, "customer")
+    
+    # Use the same Atomic Touch logic here
     rows = customer_db.execute(
-        "SELECT user_id, role FROM sessions WHERE session_id = %s",
+        """
+        UPDATE sessions 
+        SET last_access_timestamp = NOW() 
+        WHERE session_id = %s 
+          AND last_access_timestamp > NOW() - INTERVAL '5 minutes'
+        RETURNING user_id, role
+        """,
         (session_id,),
         fetch=True,
     )
+    
     if not rows:
-        raise ValueError("invalid session")
+        # If no rows are returned, it means the session either 
+        # didn't exist OR it was older than 5 minutes.
+        raise ValueError("session invalid or expired")
+        
     user_id, role = rows[0]
-    if isinstance(role, memoryview):
-        role = role.tobytes()
-    if isinstance(role, bytes):
-        role = role.decode("utf-8")
+    
+    # Convert role from DB format if necessary (Postgres might return it as bytes)
+    if isinstance(role, (memoryview, bytes)):
+        role = role.tobytes().decode("utf-8") if isinstance(role, memoryview) else role.decode("utf-8")
+        
     if role != "seller":
         raise ValueError("invalid role for this operation")
+        
     return user_id
+
 
 
 def handle_register_item_for_sale(request: Dict[str, Any], dbs: Dict[str, Database_Connection]) -> Dict[str, Any]:

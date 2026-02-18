@@ -39,11 +39,18 @@ def create_session(customer_db: Database_Connection, buyer_id: int) -> Optional[
 
 def fetch_session(customer_db: Database_Connection, session_id: str) -> Optional[Tuple[int, str]]:
     row = customer_db.execute(
-        "SELECT user_id, role FROM sessions WHERE session_id = %s",
+        """
+        UPDATE sessions 
+        SET last_access_timestamp = NOW() 
+        WHERE session_id = %s 
+          AND last_access_timestamp > NOW() - INTERVAL '5 minutes'
+        RETURNING user_id, role
+        """,
         (session_id,),
         fetch=True,
     )
     return row[0] if row else None
+
 
 
 def delete_sessions(customer_db: Database_Connection, session_id: str, user_id: int, role: str, scope: str):

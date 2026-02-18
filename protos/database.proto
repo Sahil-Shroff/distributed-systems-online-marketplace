@@ -1,0 +1,221 @@
+syntax = "proto3";
+
+package marketplace;
+
+service DatabaseService {
+    // --- Account / Session Operations ---
+    rpc CreateAccount(CreateAccountRequest) returns (CreateAccountResponse);
+    rpc AuthenticateUser(AuthenticateRequest) returns (AuthenticateResponse);
+    rpc VerifySession(VerifySessionRequest) returns (VerifySessionResponse);
+    rpc DeleteSessions(DeleteSessionsRequest) returns (Empty);
+
+    // --- Item Operations ---
+    rpc SearchItems(SearchItemsRequest) returns (SearchItemsResponse);
+    rpc GetItem(GetItemRequest) returns (Item);
+    rpc RegisterItem(RegisterItemRequest) returns (RegisterItemResponse);
+    rpc UpdateItemPrice(UpdateItemPriceRequest) returns (Empty);
+    rpc UpdateItemQuantity(UpdateItemQuantityRequest) returns (UpdateItemQuantityResponse);
+    rpc GetItemsBySeller(GetItemsBySellerRequest) returns (SearchItemsResponse);
+
+    // --- Cart Operations ---
+    rpc AddToCart(AddToCartRequest) returns (Empty);
+    rpc GetCartItemQuantity(GetCartItemQuantityRequest) returns (QuantityResponse);
+    rpc UpdateCartItem(UpdateCartItemRequest) returns (Empty);
+    rpc SaveCart(SaveCartRequest) returns (Empty);
+    rpc ClearCart(ClearCartRequest) returns (Empty);
+    rpc ListCart(ListCartRequest) returns (CartListResponse);
+    rpc DeleteUnsavedCart(DeleteUnsavedCartRequest) returns (Empty);
+
+    // --- Feedback / Rating ---
+    rpc ProvideFeedback(ProvideFeedbackRequest) returns (Empty);
+    rpc GetSellerRating(GetSellerRatingRequest) returns (SellerRatingResponse);
+
+    // --- Purchases ---
+    rpc GetPurchaseHistory(GetPurchaseHistoryRequest) returns (PurchaseHistoryResponse);
+    rpc CreatePurchase(CreatePurchaseRequest) returns (Empty);
+}
+
+message Empty {}
+
+message CreateAccountRequest {
+    string role = 1; // "buyer" or "seller"
+    string username = 2;
+    string password = 3;
+}
+
+message CreateAccountResponse {
+    int32 user_id = 1;
+}
+
+message AuthenticateRequest {
+    string role = 1;
+    string username = 2;
+    string password = 3;
+}
+
+message AuthenticateResponse {
+    int32 user_id = 1;
+    string session_id = 2;
+}
+
+message VerifySessionRequest {
+    string session_id = 1;
+}
+
+message VerifySessionResponse {
+    int32 user_id = 1;
+    string role = 2;
+}
+
+message DeleteSessionsRequest {
+    string session_id = 1;
+    int32 user_id = 2;
+    string role = 3;
+    string scope = 4; // "single" or "all"
+}
+
+message SearchItemsRequest {
+    int32 category = 1;
+    repeated string keywords = 2;
+}
+
+message Item {
+    int32 item_id = 1;
+    string item_name = 2;
+    int32 category = 3;
+    repeated string keywords = 4;
+    bool condition_is_new = 5;
+    float price = 6;
+    int32 quantity = 7;
+    int32 seller_id = 8;
+}
+
+message SearchItemsResponse {
+    repeated Item items = 1;
+}
+
+message GetItemRequest {
+    int32 item_id = 1;
+}
+
+message RegisterItemRequest {
+    string item_name = 1;
+    int32 category = 2;
+    repeated string keywords = 3;
+    string condition = 4;
+    float price = 5;
+    int32 quantity = 6;
+    int32 seller_id = 7;
+}
+
+message RegisterItemResponse {
+    int32 item_id = 1;
+}
+
+message UpdateItemPriceRequest {
+    int32 item_id = 1;
+    int32 seller_id = 2;
+    float price = 3;
+}
+
+message UpdateItemQuantityRequest {
+    int32 item_id = 1;
+    int32 seller_id = 2;
+    int32 quantity_delta = 3; // supports negative for removal
+}
+
+message UpdateItemQuantityResponse {
+    int32 new_quantity = 1;
+}
+
+message GetItemsBySellerRequest {
+    int32 seller_id = 1;
+}
+
+message AddToCartRequest {
+    int32 buyer_id = 1;
+    string session_id = 2;
+    int32 item_id = 3;
+    int32 quantity = 4;
+}
+
+message GetCartItemQuantityRequest {
+    int32 buyer_id = 1;
+    string session_id = 2;
+    int32 item_id = 3;
+}
+
+message QuantityResponse {
+    int32 quantity = 1;
+}
+
+message UpdateCartItemRequest {
+    int32 buyer_id = 1;
+    string session_id = 2;
+    int32 item_id = 3;
+    int32 quantity = 4;
+}
+
+message SaveCartRequest {
+    int32 buyer_id = 1;
+    string session_id = 2;
+}
+
+message ClearCartRequest {
+    int32 buyer_id = 1;
+    string session_id = 2;
+}
+
+message ListCartRequest {
+    int32 buyer_id = 1;
+    string session_id = 2;
+}
+
+message CartItem {
+    int32 item_id = 1;
+    int32 quantity = 2;
+}
+
+message CartListResponse {
+    repeated CartItem items = 1;
+}
+
+message DeleteUnsavedCartRequest {
+    int32 buyer_id = 1;
+    string session_id = 2;
+}
+
+message ProvideFeedbackRequest {
+    int32 item_id = 1;
+    int32 buyer_id = 2;
+    bool is_positive = 3;
+}
+
+message GetSellerRatingRequest {
+    int32 seller_id = 1;
+}
+
+message SellerRatingResponse {
+    int32 pos = 1;
+    int32 neg = 2;
+}
+
+message GetPurchaseHistoryRequest {
+    int32 buyer_id = 1;
+}
+
+message PurchaseRecord {
+    int32 item_id = 1;
+    int32 quantity = 2;
+    string purchased_at = 3;
+}
+
+message PurchaseHistoryResponse {
+    repeated PurchaseRecord records = 1;
+}
+
+message CreatePurchaseRequest {
+    int32 buyer_id = 1;
+    int32 item_id = 2;
+    int32 quantity = 3;
+}

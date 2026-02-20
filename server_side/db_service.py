@@ -236,6 +236,7 @@ class DatabaseServiceServicer(database_pb2_grpc.DatabaseServiceServicer):
         return database_pb2.Empty()
 
     def SaveCart(self, request, context):
+        # Move this session's cart to the shared saved cart (session_id='')
         self.product_db.execute(
             """
             INSERT INTO cart_items (buyer_id, session_id, item_id, quantity, is_saved)
@@ -246,6 +247,12 @@ class DatabaseServiceServicer(database_pb2_grpc.DatabaseServiceServicer):
             DO UPDATE SET quantity = cart_items.quantity + EXCLUDED.quantity
             """,
             (request.buyer_id, request.session_id),
+            fetch=False
+        )
+        # Clear all unsaved carts for this buyer across every session
+        self.product_db.execute(
+            "DELETE FROM cart_items WHERE buyer_id = %s AND is_saved = FALSE",
+            (request.buyer_id,),
             fetch=False
         )
         return database_pb2.Empty()
@@ -271,6 +278,23 @@ class DatabaseServiceServicer(database_pb2_grpc.DatabaseServiceServicer):
         self.product_db.execute(
             "DELETE FROM cart_items WHERE buyer_id = %s AND session_id = %s AND is_saved = FALSE",
             (request.buyer_id, request.session_id),
+            fetch=False
+        )
+        return database_pb2.Empty()
+
+    def ListSavedCart(self, request, context):
+        rows = self.product_db.execute(
+            "SELECT item_id, quantity FROM cart_items WHERE buyer_id = %s AND is_saved = TRUE",
+            (request.buyer_id,),
+            fetch=True
+        ) or []
+        items = [database_pb2.CartItem(item_id=r[0], quantity=r[1]) for r in rows]
+        return database_pb2.CartListResponse(items=items)
+
+    def ClearSavedCart(self, request, context):
+        self.product_db.execute(
+            "DELETE FROM cart_items WHERE buyer_id = %s AND is_saved = TRUE",
+            (request.buyer_id,),
             fetch=False
         )
         return database_pb2.Empty()

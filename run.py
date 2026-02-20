@@ -9,11 +9,14 @@ if str(REPO_ROOT) not in sys.path:
 
 from server_side.seller_interface.seller_server import SellerServer
 from server_side.buyer_interface.buyer_server import BuyerServer
+from server_side.buyer_interface import buyer_rest_server
+from server_side.seller_interface import seller_rest_server
 from client_side.common.tcp_client import TCPClient
 from client_side.seller_interface.seller_client import SellerClient
 from client_side.buyer_interface.buyer_client import BuyerClient
 import client_side.seller_interface.seller_cli as seller_cli
 import client_side.buyer_interface.buyer_cli as buyer_cli
+import uvicorn
 
 
 def run_seller_server(args):
@@ -32,6 +35,24 @@ def run_buyer_server(args):
     except KeyboardInterrupt:
         print("Shutting down buyer server...")
         server.stop()
+
+
+def run_buyer_rest_server(args):
+    uvicorn.run(
+        buyer_rest_server.app,
+        host=args.host,
+        port=args.port,
+        reload=False,
+    )
+
+
+def run_seller_rest_server(args):
+    uvicorn.run(
+        seller_rest_server.app,
+        host=args.host,
+        port=args.port,
+        reload=False,
+    )
 
 
 def run_seller_client(args):
@@ -97,6 +118,18 @@ def main():
     p.add_argument("host")
     p.add_argument("port", type=int)
     p.set_defaults(func=run_buyer_cli)
+
+    # buyer REST server (FastAPI)
+    p = sub.add_parser("buyer-rest-server", help="Run buyer REST server (FastAPI)")
+    p.add_argument("--host", default="0.0.0.0")
+    p.add_argument("--port", type=int, default=8001)
+    p.set_defaults(func=run_buyer_rest_server)
+
+    # seller REST server (FastAPI)
+    p = sub.add_parser("seller-rest-server", help="Run seller REST server (FastAPI)")
+    p.add_argument("--host", default="0.0.0.0")
+    p.add_argument("--port", type=int, default=8000)
+    p.set_defaults(func=run_seller_rest_server)
 
     args = parser.parse_args()
     args.func(args)

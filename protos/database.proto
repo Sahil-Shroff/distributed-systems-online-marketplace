@@ -25,6 +25,8 @@ service DatabaseService {
     rpc ClearCart(ClearCartRequest) returns (Empty);
     rpc ListCart(ListCartRequest) returns (CartListResponse);
     rpc DeleteUnsavedCart(DeleteUnsavedCartRequest) returns (Empty);
+    rpc ListSavedCart(ListSavedCartRequest) returns (CartListResponse);
+    rpc ClearSavedCart(ClearSavedCartRequest) returns (Empty);
 
     // --- Feedback / Rating ---
     rpc ProvideFeedback(ProvideFeedbackRequest) returns (Empty);
@@ -183,6 +185,14 @@ message CartListResponse {
 message DeleteUnsavedCartRequest {
     int32 buyer_id = 1;
     string session_id = 2;
+}
+
+message ListSavedCartRequest {
+    int32 buyer_id = 1;
+}
+
+message ClearSavedCartRequest {
+    int32 buyer_id = 1;
 }
 
 message ProvideFeedbackRequest {

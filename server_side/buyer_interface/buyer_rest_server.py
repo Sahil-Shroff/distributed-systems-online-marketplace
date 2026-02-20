@@ -192,22 +192,22 @@ def get_purchases(x_session_id: str = Header(None)):
 @app.post("/buyer/purchase")
 def make_purchase(data: PurchaseModel, x_session_id: str = Header(None)):
     user_id, _ = verify_session(x_session_id)
-    
-    # 1. Get Cart
-    cart_resp = db_stub.ListCart(database_pb2.ListCartRequest(buyer_id=user_id, session_id=x_session_id))
-    if not cart_resp.items:
-        raise HTTPException(status_code=400, detail="Cart is empty")
-        
+
+    # 1. Get saved cart (shared across sessions)
+    saved = db_stub.ListSavedCart(database_pb2.ListSavedCartRequest(buyer_id=user_id))
+    if not saved.items:
+        raise HTTPException(status_code=400, detail="Cart not saved")
+
     # 2. Check stock for all items
     items_to_buy = []
-    for c_item in cart_resp.items:
+    for cart_item in saved.items:
         try:
-            item = db_stub.GetItem(database_pb2.GetItemRequest(item_id=c_item.item_id))
-            if item.quantity < c_item.quantity:
-                raise HTTPException(status_code=400, detail=f"Item {c_item.item_id} out of stock")
-            items_to_buy.append((item, c_item.quantity))
+            item = db_stub.GetItem(database_pb2.GetItemRequest(item_id=cart_item.item_id))
+            if item.quantity < cart_item.quantity:
+                raise HTTPException(status_code=400, detail=f"Item {cart_item.item_id} out of stock")
+            items_to_buy.append((item, cart_item.quantity))
         except grpc.RpcError:
-            raise HTTPException(status_code=404, detail=f"Item {c_item.item_id} not found")
+            raise HTTPException(status_code=404, detail=f"Item {cart_item.item_id} not found")
 
     # 3. Call SOAP Financial Service
     FINANCIAL_SERVICE_WSDL = os.getenv("FINANCIAL_SERVICE_WSDL", "http://localhost:8002/?wsdl")
@@ -238,8 +238,8 @@ def make_purchase(data: PurchaseModel, x_session_id: str = Header(None)):
             buyer_id=user_id, item_id=item.item_id, quantity=qty
         ))
         
-    # 5. Clear Cart
-    db_stub.ClearCart(database_pb2.ClearCartRequest(buyer_id=user_id, session_id=x_session_id))
+    # 5. Clear saved cart
+    db_stub.ClearSavedCart(database_pb2.ClearSavedCartRequest(buyer_id=user_id))
     
     return {"status": "success", "message": "Purchase completed successfully"}
 

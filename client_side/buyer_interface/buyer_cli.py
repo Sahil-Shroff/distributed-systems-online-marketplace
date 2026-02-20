@@ -26,6 +26,7 @@ Cart:
 Feedback / History:
   feedback <item_id> <up|down>
   seller_rating <seller_id>
+  purchase <name> <card_number> <expiration_date> <security_code>
   purchases
 
 Utility:
@@ -136,6 +137,14 @@ def main():
             elif cmd == "purchases":
                 items = client.get_purchase_history()
                 print("Purchased items:", items)
+
+            elif cmd == "purchase":
+                if len(args) != 4:
+                    print("Usage: purchase <name> <card_number> <expiration_date> <security_code>")
+                else:
+                    name, card_number, exp, cvv = args
+                    result = client.make_purchase(name, card_number, exp, cvv)
+                    print("Purchase result:", result)
 
             else:
                 print("Unknown command. Type 'help'.")

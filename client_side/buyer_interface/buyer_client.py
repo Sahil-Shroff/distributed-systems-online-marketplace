@@ -182,6 +182,24 @@ class BuyerClient:
         resp = self.tcp.send_request(req)
         return extract_payload(resp)["items"]
 
+    def make_purchase(self, name: str, card_number: str, expiration_date: str, security_code: str):
+        """
+        Submit a purchase request. Assumes server implements MakePurchase API.
+        """
+        self._require_session()
+        req = build_request(
+            api="MakePurchase",
+            session_id=self.session_id,
+            payload={
+                "name": name,
+                "card_number": card_number,
+                "expiration_date": expiration_date,
+                "security_code": security_code,
+            },
+        )
+        resp = self.tcp.send_request(req)
+        return extract_payload(resp)
+
     # ---------- Helpers ----------
 
     def _require_session(self):

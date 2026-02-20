@@ -145,7 +145,7 @@ def update_cart_item(product_db: Database_Connection, buyer_id: int, session_id:
 
 
 def save_cart(product_db: Database_Connection, buyer_id: int, session_id: str):
-    # Move session cart (is_saved=FALSE) into saved bucket (session_id='', is_saved=TRUE)
+    # Move this session's cart into saved bucket
     product_db.execute(
         """
         INSERT INTO cart_items (buyer_id, session_id, item_id, quantity, is_saved)
@@ -158,18 +158,18 @@ def save_cart(product_db: Database_Connection, buyer_id: int, session_id: str):
         (buyer_id, session_id),
         fetch=False,
     )
-    # Clear the session cart
+    # Clear all unsaved carts for this buyer across sessions
     product_db.execute(
-        "DELETE FROM cart_items WHERE buyer_id = %s AND session_id = %s AND is_saved = FALSE",
-        (buyer_id, session_id),
+        "DELETE FROM cart_items WHERE buyer_id = %s AND is_saved = FALSE",
+        (buyer_id,),
         fetch=False,
     )
 
 
 def delete_unsaved_cart(product_db: Database_Connection, buyer_id: int, session_id: str):
     product_db.execute(
-        "DELETE FROM cart_items WHERE buyer_id = %s AND session_id = %s AND is_saved = FALSE",
-        (buyer_id, session_id),
+        "DELETE FROM cart_items WHERE buyer_id = %s AND is_saved = FALSE",
+        (buyer_id,),
         fetch=False,
     )
 
@@ -186,6 +186,14 @@ def list_cart(product_db: Database_Connection, buyer_id: int, session_id: str):
     return product_db.execute(
         "SELECT item_id, quantity FROM cart_items WHERE buyer_id = %s AND session_id = %s AND is_saved = FALSE",
         (buyer_id, session_id),
+        fetch=True,
+    ) or []
+
+
+def list_saved_cart(product_db: Database_Connection, buyer_id: int):
+    return product_db.execute(
+        "SELECT item_id, quantity FROM cart_items WHERE buyer_id = %s AND is_saved = TRUE",
+        (buyer_id,),
         fetch=True,
     ) or []
 
@@ -241,3 +249,21 @@ def buyer_purchases(product_db: Database_Connection, buyer_id: int):
         (buyer_id,),
         fetch=True,
     ) or []
+
+
+# ---------- Purchase ----------
+
+def create_purchase(product_db: Database_Connection, buyer_id: int, item_id: Any, quantity: int):
+    product_db.execute(
+        "INSERT INTO purchases (buyer_id, item_id, quantity) VALUES (%s, %s, %s)",
+        (buyer_id, item_id, quantity),
+        fetch=False,
+    )
+
+
+def update_item_quantity(product_db: Database_Connection, item_id: Any, quantity_delta: int):
+    product_db.execute(
+        "UPDATE items SET quantity = quantity + %s WHERE item_id = %s",
+        (quantity_delta, item_id),
+        fetch=False,
+    )

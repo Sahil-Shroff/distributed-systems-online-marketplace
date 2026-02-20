@@ -6,6 +6,11 @@ import time
 # Add generated directory to sys.path
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'generated'))
+# Ensure repo root is on path for server_side imports
+from pathlib import Path
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from protos import database_pb2
 from protos import database_pb2_grpc
@@ -375,8 +380,9 @@ def serve():
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     database_pb2_grpc.add_DatabaseServiceServicer_to_server(DatabaseServiceServicer(), server)
     port = os.getenv("DB_SERVICE_PORT", "50051")
-    server.add_insecure_port(f'[::]:{port}')
-    print(f"Database gRPC Service starting on port {port}...")
+    bind_addr = os.getenv("DB_SERVICE_BIND", f"0.0.0.0:{port}")
+    server.add_insecure_port(bind_addr)
+    print(f"Database gRPC Service starting on {bind_addr}...")
     server.start()
     server.wait_for_termination()
 

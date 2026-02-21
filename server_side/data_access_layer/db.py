@@ -25,6 +25,7 @@ class Database_Connection:
         if not self.password:
             raise RuntimeError("PGPASSWORD not set. Store it in .env or environment variables.")
         self.DB_POOL = None
+        print(f"Connecting to DB at {self.host}:{self.port} with user {self.user}...")
         self._connect()
 
     def _connect(self):

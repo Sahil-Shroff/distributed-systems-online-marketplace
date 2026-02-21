@@ -1,4 +1,11 @@
 import sys
+from pathlib import Path
+
+# ensure repo root on path for client_side imports
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from client_side.common.tcp_client import TCPClient
 from client_side.seller_interface.seller_client import SellerClient
 from client_side.common.protocol import ClientProtocolError
@@ -44,6 +51,7 @@ def main():
                 continue
 
             parts = raw.split()
+            print("parts", parts)
             cmd = parts[0].lower()
             args = parts[1:]
 

@@ -1,0 +1,18 @@
+# Core web & API
+fastapi>=0.110
+uvicorn[standard]>=0.24
+
+# gRPC
+grpcio>=1.76.0
+grpcio-tools>=1.76.0
+
+# SOAP client/server
+spyne>=2.14.0
+zeep>=4.2.1
+lxml>=4.9.4
+
+# Database
+psycopg2-binary>=2.9.11
+
+# Validation (pulled by FastAPI, explicit for clarity)
+pydantic>=1.10

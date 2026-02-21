@@ -29,11 +29,22 @@ class BuyerServer(Server):
             )
         
         handler = self.handlers.get(api)
-        response_payload = handler(request, self.db_conns)
-        session_id = response_payload.get("session_id")
-        print("response_payload", response_payload)
-
-        return build_response(api=api, payload=response_payload, session_id=session_id)
+        try:
+            response_payload = handler(request, self.db_conns)
+            session_id = response_payload.get("session_id")
+            print("response_payload", response_payload)
+            return build_response(api=api, payload=response_payload, session_id=session_id)
+        except ValueError as exc:
+            # Business/validation errors bubble up as client errors
+            return build_error(
+                api=api,
+                code="CLIENT_ERROR",
+                message=str(exc),
+                session_id=session_id,
+            )
+        except Exception as exc:
+            # Let upstream logger handle; re-raise to outer handler
+            raise exc
     
 
 if __name__ == "__main__":

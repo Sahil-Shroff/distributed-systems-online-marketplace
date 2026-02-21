@@ -3,9 +3,11 @@ from typing import Any, Dict, Iterable, List
 
 from server_side.data_access_layer.db import Database_Connection
 from server_side.buyer_interface import buyer_repository as repo
+from zeep import Client as SoapClient
 
 # "single", "all" - determines whether logout invalidates only the current session or all sessions
 LOGOUT_SCOPE = os.getenv("LOGOUT_SCOPE", "single").lower()
+FINANCIAL_SERVICE_WSDL = os.getenv("FINANCIAL_SERVICE_WSDL", "http://localhost:8002/?wsdl")
 
 
 # ---------- Common helpers ----------
@@ -81,6 +83,9 @@ def handle_logout(request: Dict[str, Any], dbs: Dict[str, Database_Connection]) 
     if role != "buyer":
         raise ValueError("invalid role for logout")
 
+    product_db = _get_db(dbs, "product")
+    repo.delete_unsaved_cart(product_db, user_id, session_id)
+
     repo.delete_sessions(customer_db, session_id, user_id, role, LOGOUT_SCOPE)
     return {"status": "success", "scope": LOGOUT_SCOPE}
 
@@ -144,6 +149,7 @@ def handle_add_item_to_cart(request: Dict[str, Any], dbs: Dict[str, Database_Con
     qty = payload["quantity"]
     session_id = request.get("session_id")
     buyer_id = _require_buyer_session(dbs, session_id)
+    session_id_str = str(session_id)
 
     product_db = _get_db(dbs, "product")
     available = repo.get_item_stock(product_db, item_id)
@@ -152,7 +158,7 @@ def handle_add_item_to_cart(request: Dict[str, Any], dbs: Dict[str, Database_Con
     if qty > available:
         raise ValueError("ITEM_OUT_OF_STOCK")
 
-    repo.add_item_to_cart(product_db, buyer_id, item_id, qty)
+    repo.add_item_to_cart(product_db, buyer_id, session_id_str, item_id, qty)
     return {"status": "success"}
 
 
@@ -163,36 +169,41 @@ def handle_remove_item_from_cart(request: Dict[str, Any], dbs: Dict[str, Databas
     qty = payload["quantity"]
     session_id = request.get("session_id")
     buyer_id = _require_buyer_session(dbs, session_id)
+    session_id_str = str(session_id)
 
     product_db = _get_db(dbs, "product")
-    current = repo.get_cart_item_quantity(product_db, buyer_id, item_id)
+    current = repo.get_cart_item_quantity(product_db, buyer_id, session_id_str, item_id)
     if current is None:
         raise ValueError("item not in cart")
     new_qty = current - qty
-    repo.update_cart_item(product_db, buyer_id, item_id, new_qty)
+    repo.update_cart_item(product_db, buyer_id, session_id_str, item_id, new_qty)
     return {"status": "success", "quantity": max(new_qty, 0)}
 
 
 def handle_save_cart(request: Dict[str, Any], dbs: Dict[str, Database_Connection]) -> Dict[str, Any]:
-    # If cart_items persists in DB, this is effectively a no-op.
     session_id = request.get("session_id")
-    _require_buyer_session(dbs, session_id)
+    buyer_id = _require_buyer_session(dbs, session_id)
+    session_id_str = str(session_id)
+    product_db = _get_db(dbs, "product")
+    repo.save_cart(product_db, buyer_id, session_id_str)
     return {"status": "success"}
 
 
 def handle_clear_cart(request: Dict[str, Any], dbs: Dict[str, Database_Connection]) -> Dict[str, Any]:
     session_id = request.get("session_id")
     buyer_id = _require_buyer_session(dbs, session_id)
+    session_id_str = str(session_id)
     product_db = _get_db(dbs, "product")
-    repo.clear_cart(product_db, buyer_id)
+    repo.clear_cart(product_db, buyer_id, session_id_str)
     return {"status": "success"}
 
 
 def handle_display_cart(request: Dict[str, Any], dbs: Dict[str, Database_Connection]) -> Dict[str, Any]:
     session_id = request.get("session_id")
     buyer_id = _require_buyer_session(dbs, session_id)
+    session_id_str = str(session_id)
     product_db = _get_db(dbs, "product")
-    rows = repo.list_cart(product_db, buyer_id)
+    rows = repo.list_cart(product_db, buyer_id, session_id_str)
     items = [{"item_id": r[0], "quantity": r[1]} for r in rows]
     return {"cart": items}
 
@@ -239,6 +250,57 @@ def handle_get_buyer_purchases(request: Dict[str, Any], dbs: Dict[str, Database_
     return {"items": purchases}
 
 
+def handle_make_purchase(request: Dict[str, Any], dbs: Dict[str, Database_Connection]) -> Dict[str, Any]:
+    payload = request.get("payload", {})
+    _require_fields(payload, ("name", "card_number", "expiration_date", "security_code"))
+    session_id = request.get("session_id")
+    buyer_id = _require_buyer_session(dbs, session_id)
+
+    product_db = _get_db(dbs, "product")
+
+    # 1) Load saved cart (shared across sessions)
+    cart_rows = repo.list_saved_cart(product_db, buyer_id)
+    if not cart_rows:
+        raise ValueError("CART_NOT_SAVED")
+
+    # 2) Check stock
+    cart_items = []
+    for item_id, qty in cart_rows:
+        stock = repo.get_item_stock(product_db, item_id)
+        if stock is None or stock < qty:
+            raise ValueError(f"ITEM_OUT_OF_STOCK:{item_id}")
+        cart_items.append((item_id, qty))
+
+    # 3) Call SOAP financial service
+    try:
+        soap_client = SoapClient(FINANCIAL_SERVICE_WSDL)
+        success = soap_client.service.AuthorizePayment(
+            username=payload["name"],
+            card_number=payload["card_number"],
+            expiration_date=payload["expiration_date"],
+            security_code=payload["security_code"],
+        )
+    except Exception as e:
+        raise ValueError(f"PAYMENT_SERVICE_UNAVAILABLE:{e}")
+
+    if not success:
+        raise ValueError("PAYMENT_DECLINED")
+
+    # 4) Finalize: deduct stock, create purchases
+    for item_id, qty in cart_items:
+        repo.update_item_quantity(product_db, item_id, -qty)
+        repo.create_purchase(product_db, buyer_id, item_id, qty)
+
+    # 5) Clear saved cart after purchase
+    product_db.execute(
+        "DELETE FROM cart_items WHERE buyer_id = %s AND is_saved = TRUE",
+        (buyer_id,),
+        fetch=False,
+    )
+
+    return {"status": "success"}
+
+
 # ---------- Handler map ----------
 
 HANDLERS = {
@@ -255,4 +317,5 @@ HANDLERS = {
     "ProvideFeedback": handle_provide_feedback,
     "GetSellerRating": handle_get_seller_rating,
     "GetBuyerPurchases": handle_get_buyer_purchases,
+    "MakePurchase": handle_make_purchase,
 }

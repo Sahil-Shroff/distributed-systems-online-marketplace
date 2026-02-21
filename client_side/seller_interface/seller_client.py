@@ -168,34 +168,15 @@ if __name__ == "__main__":
 
         # Register an item
         item_id = client.register_item_for_sale(
-            item_name="Laptop",
+            item_name="Laptop 2",
             category=3,
-            keywords=["dell", "i7"],
+            keywords=["dell", "i5"],
             condition="New",
             price=799.99,
             quantity=5,
         )
         print(f"Registered item_id={item_id}")
 
-        # Change price
-        new_price = 749.99
-        client.change_item_price(item_id, new_price)
-        print(f"Updated price to {new_price}")
-
-        # Update units (decrease by 1)
-        client.update_units_for_sale(item_id, -1)
-        print("Decreased quantity by 1")
-
-        # Display items
-        items = client.display_items_for_sale()
-        print("Items for sale:", items)
-
-        # Seller rating (may be unimplemented on server)
-        try:
-            rating = client.get_seller_rating()
-            print("Seller rating:", rating)
-        except ClientProtocolError as e:
-            print("GetSellerRating not implemented:", e)
 
         client.logout()
         print("Logged out.")

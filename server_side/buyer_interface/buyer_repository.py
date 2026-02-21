@@ -39,11 +39,18 @@ def create_session(customer_db: Database_Connection, buyer_id: int) -> Optional[
 
 def fetch_session(customer_db: Database_Connection, session_id: str) -> Optional[Tuple[int, str]]:
     row = customer_db.execute(
-        "SELECT user_id, role FROM sessions WHERE session_id = %s",
+        """
+        UPDATE sessions 
+        SET last_access_timestamp = NOW() 
+        WHERE session_id = %s 
+          AND last_access_timestamp > NOW() - INTERVAL '5 minutes'
+        RETURNING user_id, role
+        """,
         (session_id,),
         fetch=True,
     )
     return row[0] if row else None
+
 
 
 def delete_sessions(customer_db: Database_Connection, session_id: str, user_id: int, role: str, scope: str):
@@ -100,53 +107,92 @@ def get_item_stock(product_db: Database_Connection, item_id: Any) -> Optional[in
 
 # ---------- Cart ----------
 
-def add_item_to_cart(product_db: Database_Connection, buyer_id: int, item_id: Any, qty: int):
+def add_item_to_cart(product_db: Database_Connection, buyer_id: int, session_id: str, item_id: Any, qty: int):
     product_db.execute(
         """
-        INSERT INTO cart_items (buyer_id, item_id, quantity)
-        VALUES (%s, %s, %s)
-        ON CONFLICT (buyer_id, item_id) DO UPDATE SET quantity = cart_items.quantity + EXCLUDED.quantity
+        INSERT INTO cart_items (buyer_id, session_id, item_id, quantity, is_saved)
+        VALUES (%s, %s, %s, %s, FALSE)
+        ON CONFLICT (buyer_id, session_id, item_id, is_saved) DO UPDATE
+        SET quantity = cart_items.quantity + EXCLUDED.quantity
         """,
-        (buyer_id, item_id, qty),
+        (buyer_id, session_id, item_id, qty),
         fetch=False,
     )
 
 
-def get_cart_item_quantity(product_db: Database_Connection, buyer_id: int, item_id: Any) -> Optional[int]:
+def get_cart_item_quantity(product_db: Database_Connection, buyer_id: int, session_id: str, item_id: Any) -> Optional[int]:
     row = product_db.execute(
-        "SELECT quantity FROM cart_items WHERE buyer_id = %s AND item_id = %s",
-        (buyer_id, item_id),
+        "SELECT quantity FROM cart_items WHERE buyer_id = %s AND session_id = %s AND item_id = %s AND is_saved = FALSE",
+        (buyer_id, session_id, item_id),
         fetch=True,
     )
     return row[0][0] if row else None
 
 
-def update_cart_item(product_db: Database_Connection, buyer_id: int, item_id: Any, new_qty: int):
+def update_cart_item(product_db: Database_Connection, buyer_id: int, session_id: str, item_id: Any, new_qty: int):
     if new_qty <= 0:
         product_db.execute(
-            "DELETE FROM cart_items WHERE buyer_id = %s AND item_id = %s",
-            (buyer_id, item_id),
+            "DELETE FROM cart_items WHERE buyer_id = %s AND session_id = %s AND item_id = %s AND is_saved = FALSE",
+            (buyer_id, session_id, item_id),
             fetch=False,
         )
     else:
         product_db.execute(
-            "UPDATE cart_items SET quantity = %s WHERE buyer_id = %s AND item_id = %s",
-            (new_qty, buyer_id, item_id),
+            "UPDATE cart_items SET quantity = %s WHERE buyer_id = %s AND session_id = %s AND item_id = %s AND is_saved = FALSE",
+            (new_qty, buyer_id, session_id, item_id),
             fetch=False,
         )
 
 
-def clear_cart(product_db: Database_Connection, buyer_id: int):
+def save_cart(product_db: Database_Connection, buyer_id: int, session_id: str):
+    # Move this session's cart into saved bucket
     product_db.execute(
-        "DELETE FROM cart_items WHERE buyer_id = %s",
+        """
+        INSERT INTO cart_items (buyer_id, session_id, item_id, quantity, is_saved)
+        SELECT buyer_id, '', item_id, quantity, TRUE
+        FROM cart_items
+        WHERE buyer_id = %s AND session_id = %s AND is_saved = FALSE
+        ON CONFLICT (buyer_id, session_id, item_id, is_saved)
+        DO UPDATE SET quantity = cart_items.quantity + EXCLUDED.quantity
+        """,
+        (buyer_id, session_id),
+        fetch=False,
+    )
+    # Clear all unsaved carts for this buyer across sessions
+    product_db.execute(
+        "DELETE FROM cart_items WHERE buyer_id = %s AND is_saved = FALSE",
         (buyer_id,),
         fetch=False,
     )
 
 
-def list_cart(product_db: Database_Connection, buyer_id: int):
+def delete_unsaved_cart(product_db: Database_Connection, buyer_id: int, session_id: str):
+    product_db.execute(
+        "DELETE FROM cart_items WHERE buyer_id = %s AND is_saved = FALSE",
+        (buyer_id,),
+        fetch=False,
+    )
+
+
+def clear_cart(product_db: Database_Connection, buyer_id: int, session_id: str):
+    product_db.execute(
+        "DELETE FROM cart_items WHERE buyer_id = %s AND session_id = %s AND is_saved = FALSE",
+        (buyer_id, session_id),
+        fetch=False,
+    )
+
+
+def list_cart(product_db: Database_Connection, buyer_id: int, session_id: str):
     return product_db.execute(
-        "SELECT item_id, quantity FROM cart_items WHERE buyer_id = %s",
+        "SELECT item_id, quantity FROM cart_items WHERE buyer_id = %s AND session_id = %s AND is_saved = FALSE",
+        (buyer_id, session_id),
+        fetch=True,
+    ) or []
+
+
+def list_saved_cart(product_db: Database_Connection, buyer_id: int):
+    return product_db.execute(
+        "SELECT item_id, quantity FROM cart_items WHERE buyer_id = %s AND is_saved = TRUE",
         (buyer_id,),
         fetch=True,
     ) or []
@@ -203,3 +249,21 @@ def buyer_purchases(product_db: Database_Connection, buyer_id: int):
         (buyer_id,),
         fetch=True,
     ) or []
+
+
+# ---------- Purchase ----------
+
+def create_purchase(product_db: Database_Connection, buyer_id: int, item_id: Any, quantity: int):
+    product_db.execute(
+        "INSERT INTO purchases (buyer_id, item_id, quantity) VALUES (%s, %s, %s)",
+        (buyer_id, item_id, quantity),
+        fetch=False,
+    )
+
+
+def update_item_quantity(product_db: Database_Connection, item_id: Any, quantity_delta: int):
+    product_db.execute(
+        "UPDATE items SET quantity = quantity + %s WHERE item_id = %s",
+        (quantity_delta, item_id),
+        fetch=False,
+    )

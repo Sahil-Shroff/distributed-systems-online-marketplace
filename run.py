@@ -17,6 +17,7 @@ from client_side.buyer_interface.buyer_client import BuyerClient
 import client_side.seller_interface.seller_cli as seller_cli
 import client_side.buyer_interface.buyer_cli as buyer_cli
 import client_side.seller_interface.seller_rest_cli as seller_rest_cli
+import client_side.buyer_interface.buyer_rest_cli as buyer_rest_cli
 import uvicorn
 
 
@@ -83,6 +84,10 @@ def run_buyer_cli(args):
     sys.argv = ["buyer_cli.py", args.host, str(args.port)]
     buyer_cli.main()
 
+def run_buyer_rest_cli(args):
+    sys.argv = ["buyer_rest_cli.py", args.host, str(args.port)]
+    buyer_rest_cli.main()
+
 
 def main():
     parser = argparse.ArgumentParser(description="Run marketplace components.")
@@ -123,6 +128,12 @@ def main():
     p.add_argument("host")
     p.add_argument("port", type=int)
     p.set_defaults(func=run_seller_rest_cli)
+
+    # buyer REST CLI
+    p = sub.add_parser("buyer-rest-cli", help="Run buyer REST CLI")
+    p.add_argument("host")
+    p.add_argument("port", type=int)
+    p.set_defaults(func=run_buyer_rest_cli)
 
     # buyer CLI
     p = sub.add_parser("buyer-cli", help="Run buyer CLI")

@@ -1,94 +1,102 @@
 import requests
 
-class BuyerRESTClient:
-    def __init__(self, base_url: str):
-        self.base_url = base_url
+
+class BuyerRestClient:
+    """
+    Lightweight REST client for the buyer FastAPI server.
+    """
+
+    def __init__(self, host: str = "127.0.0.1", port: int = 8001):
+        self.base = f"http://{host}:{port}"
         self.session_id = None
         self.buyer_id = None
 
-    def _get_headers(self):
-        return {"X-Session-ID": self.session_id} if self.session_id else {}
-
-    def create_account(self, username, password):
-        resp = requests.post(f"{self.base_url}/buyer/account", json={
-            "username": username, "password": password
-        })
+    # --- Auth ---
+    def create_account(self, username: str, password: str) -> int:
+        resp = requests.post(f"{self.base}/buyer/account", json={"username": username, "password": password})
         resp.raise_for_status()
         self.buyer_id = resp.json()["buyer_id"]
         return self.buyer_id
 
-    def login(self, username, password):
-        resp = requests.post(f"{self.base_url}/buyer/login", json={
-            "username": username, "password": password
-        })
+    def login(self, username: str, password: str) -> int:
+        resp = requests.post(f"{self.base}/buyer/login", json={"username": username, "password": password})
         resp.raise_for_status()
         data = resp.json()
         self.session_id = data["session_id"]
         self.buyer_id = data["buyer_id"]
-        return self.session_id
+        return self.buyer_id
 
     def logout(self):
-        resp = requests.post(f"{self.base_url}/buyer/logout", headers=self._get_headers())
-        resp.raise_for_status()
+        self._auth_post(f"{self.base}/buyer/logout")
         self.session_id = None
-        return resp.json()["status"]
 
-    def search_items(self, category=0, keywords=""):
-        params = {"category": category, "keywords": ",".join(keywords) if isinstance(keywords, list) else keywords}
-        resp = requests.get(f"{self.base_url}/buyer/items", params=params)
+    # --- Items ---
+    def search_items(self, category: int = 0, keywords=None):
+        kw = ",".join(keywords) if keywords else ""
+        resp = requests.get(f"{self.base}/buyer/items", params={"category": category, "keywords": kw})
         resp.raise_for_status()
-        return resp.json()["items"]
+        return resp.json().get("items", [])
 
-    def get_item(self, item_id):
-        resp = requests.get(f"{self.base_url}/buyer/items/{item_id}")
+    def get_item(self, item_id: int):
+        resp = requests.get(f"{self.base}/buyer/items/{item_id}")
         resp.raise_for_status()
         return resp.json()
 
-    def add_item_to_cart(self, item_id, quantity):
-        resp = requests.post(f"{self.base_url}/buyer/cart", headers=self._get_headers(), json={
-            "item_id": item_id, "quantity": quantity
-        })
-        resp.raise_for_status()
-        return resp.json()["status"]
+    # --- Cart ---
+    def add_to_cart(self, item_id: int, quantity: int):
+        self._auth_post(f"{self.base}/buyer/cart", json={"item_id": item_id, "quantity": quantity})
 
     def display_cart(self):
-        resp = requests.get(f"{self.base_url}/buyer/cart", headers=self._get_headers())
-        resp.raise_for_status()
-        return resp.json()["cart"]
+        resp = self._auth_get(f"{self.base}/buyer/cart")
+        return resp.json().get("cart", [])
 
     def save_cart(self):
-        resp = requests.post(f"{self.base_url}/buyer/cart/save", headers=self._get_headers())
-        resp.raise_for_status()
-        return resp.json()["status"]
+        self._auth_post(f"{self.base}/buyer/cart/save")
 
     def clear_cart(self):
-        resp = requests.delete(f"{self.base_url}/buyer/cart/all", headers=self._get_headers())
-        resp.raise_for_status()
-        return resp.json()["status"]
+        self._auth_delete(f"{self.base}/buyer/cart/all")
 
-    def provide_feedback(self, item_id, is_positive):
-        resp = requests.post(f"{self.base_url}/buyer/feedback", headers=self._get_headers(), json={
-            "item_id": item_id, "is_positive": is_positive
-        })
-        resp.raise_for_status()
-        return resp.json()["status"]
+    # --- Feedback ---
+    def provide_feedback(self, item_id: int, is_positive: bool):
+        self._auth_post(f"{self.base}/buyer/feedback", json={"item_id": item_id, "is_positive": bool(is_positive)})
 
-    def get_seller_rating(self, seller_id):
-        resp = requests.get(f"{self.base_url}/seller/{seller_id}/rating")
-        resp.raise_for_status()
+    # --- Purchase ---
+    def purchase(self, name: str, card_number: str, expiration_date: str, security_code: str):
+        resp = self._auth_post(
+            f"{self.base}/buyer/purchase",
+            json={
+                "name": name,
+                "card_number": card_number,
+                "expiration_date": expiration_date,
+                "security_code": security_code,
+            },
+        )
         return resp.json()
 
-    def get_purchase_history(self):
-        resp = requests.get(f"{self.base_url}/buyer/purchases", headers=self._get_headers())
-        resp.raise_for_status()
-        return resp.json()["purchases"]
+    # --- Helpers ---
+    def _headers(self):
+        h = {}
+        if self.session_id:
+            h["x-session-id"] = str(self.session_id)
+        return h
 
-    def make_purchase(self, name, card_num, expiry, code):
-        resp = requests.post(f"{self.base_url}/buyer/purchase", headers=self._get_headers(), json={
-            "name": name,
-            "card_number": card_num,
-            "expiration_date": expiry,
-            "security_code": code
-        })
+    def _auth_post(self, url, **kwargs):
+        headers = kwargs.pop("headers", {})
+        headers.update(self._headers())
+        resp = requests.post(url, headers=headers, **kwargs)
         resp.raise_for_status()
-        return resp.json()
+        return resp
+
+    def _auth_get(self, url, **kwargs):
+        headers = kwargs.pop("headers", {})
+        headers.update(self._headers())
+        resp = requests.get(url, headers=headers, **kwargs)
+        resp.raise_for_status()
+        return resp
+
+    def _auth_delete(self, url, **kwargs):
+        headers = kwargs.pop("headers", {})
+        headers.update(self._headers())
+        resp = requests.delete(url, headers=headers, **kwargs)
+        resp.raise_for_status()
+        return resp

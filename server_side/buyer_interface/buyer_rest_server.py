@@ -101,7 +101,7 @@ def search_items(category: int = 0, keywords: str = ""):
             "item_id": item.item_id,
             "item_name": item.item_name,
             "category": item.category,
-            "keywords": item.keywords,
+            "keywords": list(item.keywords),
             "condition_is_new": item.condition_is_new,
             "price": item.price,
             "quantity": item.quantity,
@@ -117,7 +117,7 @@ def get_item(item_id: int):
             "item_id": item.item_id,
             "item_name": item.item_name,
             "category": item.category,
-            "keywords": item.keywords,
+            "keywords": list(item.keywords),
             "condition_is_new": item.condition_is_new,
             "price": item.price,
             "quantity": item.quantity,
@@ -180,8 +180,8 @@ def provide_feedback(data: FeedbackModel, x_session_id: str = Header(None)):
 def get_seller_rating(seller_id: int):
     resp = db_stub.GetSellerRating(database_pb2.GetSellerRatingRequest(seller_id=seller_id))
     total = resp.pos + resp.neg
-    rating = resp.pos / total if total > 0 else 0
-    return {"rating": rating, "pos": resp.pos, "neg": resp.neg}
+    rating = float(resp.pos) / total if total > 0 else 0.0
+    return {"rating": rating, "pos": int(resp.pos), "neg": int(resp.neg)}
 
 @app.get("/buyer/purchases")
 def get_purchases(x_session_id: str = Header(None)):

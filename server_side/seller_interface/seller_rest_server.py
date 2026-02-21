@@ -89,8 +89,8 @@ def get_seller_rating(x_session_id: str = Header(None)):
     user_id, _ = verify_session(x_session_id)
     resp = db_stub.GetSellerRating(database_pb2.GetSellerRatingRequest(seller_id=user_id))
     total = resp.pos + resp.neg
-    rating = resp.pos / total if total > 0 else 0
-    return {"rating": rating, "pos": resp.pos, "neg": resp.neg}
+    rating = float(resp.pos) / total if total > 0 else 0.0
+    return {"rating": rating, "pos": int(resp.pos), "neg": int(resp.neg)}
 
 @app.post("/seller/items")
 def register_item(data: RegisterItemModel, x_session_id: str = Header(None)):
@@ -144,7 +144,7 @@ def display_items(x_session_id: str = Header(None)):
             "item_id": item.item_id,
             "item_name": item.item_name,
             "category": item.category,
-            "keywords": item.keywords,
+            "keywords": list(item.keywords),
             "condition_is_new": item.condition_is_new,
             "price": item.price,
             "quantity": item.quantity

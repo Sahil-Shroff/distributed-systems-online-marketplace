@@ -4,7 +4,8 @@ set -euo pipefail
 PROJECT="$(gcloud config get-value project)"
 REGION="us-central1"
 INSTANCE="marketplace-sql"
-TIER="db-f1-micro"            # cheapest; adjust if you need more CPU/RAM
+# Default to a small Enterprise Plus-permitted tier (2 vCPU / 8 GB)
+TIER="${TIER:-db-perf-optimized-2-8}"
 PG_VERSION="POSTGRES_17"
 ROOT_PW="${ROOT_PW:-password}"  # override with env var
 DB_USER="postgres"

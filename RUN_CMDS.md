@@ -21,7 +21,11 @@ database\create_dbs.bat
 ```
 python server_side/db_service.py
 ```
-Env (optional): `DB_SERVICE_PORT` (default 50051), `PGHOST/PGPORT/PGUSER/PGPASSWORD`, `CUSTOMER_DB_NAME`, `PRODUCT_DB_NAME`, `FIN_DB_NAME`.
+Env (optional):
+- Customer DB: `CUSTOMER_PGHOST`, `CUSTOMER_PGPORT`, `CUSTOMER_PGUSER`, `CUSTOMER_PGPASSWORD`, `CUSTOMER_DB_NAME`
+- Product DB:  `PRODUCT_PGHOST`, `PRODUCT_PGPORT`, `PRODUCT_PGUSER`, `PRODUCT_PGPASSWORD`, `PRODUCT_DB_NAME`
+- Fallbacks: `PGHOST/PGPORT/PGUSER/PGPASSWORD` used if per-DB vars are not set.
+- `DB_SERVICE_PORT` (default 50051)
 
 ## 3) Start servers (choose REST or TCP)
 - Seller REST: `python run.py seller-rest-server --port 8000`

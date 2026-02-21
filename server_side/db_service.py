@@ -24,8 +24,22 @@ except Exception:
 
 class DatabaseServiceServicer(database_pb2_grpc.DatabaseServiceServicer):
     def __init__(self):
-        self.customer_db = Database_Connection(os.getenv("CUSTOMER_DB_NAME", "customer_db"))
-        self.product_db = Database_Connection(os.getenv("PRODUCT_DB_NAME", "product_db"))
+        # Customer DB connection (defaults to PG* envs)
+        self.customer_db = Database_Connection(
+            os.getenv("CUSTOMER_DB_NAME", "customer-database"),
+            host=os.getenv("CUSTOMER_PGHOST") or os.getenv("PGHOST", "localhost"),
+            port=int(os.getenv("CUSTOMER_PGPORT") or os.getenv("PGPORT", "5434")),
+            user=os.getenv("CUSTOMER_PGUSER") or os.getenv("PGUSER", "postgres"),
+            password=os.getenv("CUSTOMER_PGPASSWORD") or os.getenv("PGPASSWORD"),
+        )
+        # Product DB connection (can point to a different host)
+        self.product_db = Database_Connection(
+            os.getenv("PRODUCT_DB_NAME", "product-database"),
+            host=os.getenv("PRODUCT_PGHOST") or os.getenv("PGHOST", "localhost"),
+            port=int(os.getenv("PRODUCT_PGPORT") or os.getenv("PGPORT", "5434")),
+            user=os.getenv("PRODUCT_PGUSER") or os.getenv("PGUSER", "postgres"),
+            password=os.getenv("PRODUCT_PGPASSWORD") or os.getenv("PGPASSWORD"),
+        )
 
     # --- Account / Session Operations ---
     def CreateAccount(self, request, context):

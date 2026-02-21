@@ -9,12 +9,19 @@ except Exception:
 
 class Database_Connection:
 
-    def __init__(self, db_name: str | None = None):
-        self.host = os.getenv("PGHOST", "localhost")
-        self.port = int(os.getenv("PGPORT", "5434"))
+    def __init__(
+        self,
+        db_name: str | None = None,
+        host: str | None = None,
+        port: int | None = None,
+        user: str | None = None,
+        password: str | None = None,
+    ):
+        self.host = host or os.getenv("PGHOST", "localhost")
+        self.port = int(port or os.getenv("PGPORT", "5434"))
         self.db_name = db_name
-        self.user = os.getenv("PGUSER", "postgres")
-        self.password = os.getenv("PGPASSWORD")
+        self.user = user or os.getenv("PGUSER", "postgres")
+        self.password = password or os.getenv("PGPASSWORD")
         if not self.password:
             raise RuntimeError("PGPASSWORD not set. Store it in .env or environment variables.")
         self.DB_POOL = None

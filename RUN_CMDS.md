@@ -1,6 +1,6 @@
 # Run Commands Cheat Sheet
 
-## 1) Create / reset databases
+## 1) Create / reset databases (customer + product only; no financial DB)
 Windows:
 ```
 set PROJECT=<gcp-project-id>
@@ -37,11 +37,11 @@ Point REST servers at DB gRPC: `set DB_SERVICE_ADDR=host:port` (default `localho
 - Seller TCP CLI:  `python run.py seller-cli 127.0.0.1 8080`
 - Buyer TCP CLI:   `python run.py buyer-cli 127.0.0.1 8081`
 
-## 5) Financial service (SOAP mock)
+## 5) Financial service (SOAP mock, stateless)
 ```
 python server_side/financial_service.py
 ```
-Env (optional): `FIN_DB_*` for its DB; WSDL served on port 8002 by default.
+No DB storage; returns Yes ~90% of the time. WSDL on port 8002 by default.
 
 ## 6) Benchmarks
 ```

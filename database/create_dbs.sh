@@ -24,7 +24,7 @@ echo "Enabling public IP (simplest for a quick test)..."
 gcloud sql instances patch "${INSTANCE}" --assign-ip --quiet
 
 echo "Creating databases..."
-for DB in customer-database product-database financial-database; do
+for DB in customer-database product-database; do
   gcloud sql databases create "${DB}" --instance="${INSTANCE}" --quiet
 done
 
@@ -90,19 +90,6 @@ CREATE TABLE IF NOT EXISTS purchases (
 );
 SQL
 
-echo "Applying financial-database schema..."
-$PSQL -d financial-database <<'SQL'
-CREATE TABLE IF NOT EXISTS transactions (
-  id SERIAL PRIMARY KEY,
-  username VARCHAR(128) NOT NULL,
-  card_last4 VARCHAR(4) NOT NULL,
-  expiration_date VARCHAR(10) NOT NULL,
-  approved BOOLEAN NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-SQL
-
 echo "Done. Connect with:"
 echo "  psql \"host=${IP} user=${DB_USER} password=${ROOT_PW} dbname=customer-database sslmode=require\""
 echo "  psql \"host=${IP} user=${DB_USER} password=${ROOT_PW} dbname=product-database sslmode=require\""
-echo "  psql \"host=${IP} user=${DB_USER} password=${ROOT_PW} dbname=financial-database sslmode=require\""

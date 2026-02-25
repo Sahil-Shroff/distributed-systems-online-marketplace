@@ -41,6 +41,14 @@ Point REST servers at DB gRPC: `set DB_SERVICE_ADDR=host:port` (default `localho
 - Seller TCP CLI:  `python run.py seller-cli 127.0.0.1 8080`
 - Buyer TCP CLI:   `python run.py buyer-cli 127.0.0.1 8081`
 
+## 5) SSH tunnel examples (reach a remote REST server from local)
+- Forward local 8000 to remote seller REST on 127.0.0.1:8000:
+  ```
+  ssh -L 8000:127.0.0.1:8000 student@10.224.76.51
+  ```
+  Then call locally: `python run.py seller-rest-cli 127.0.0.1 8000`
+- (Adjust host/user/ports as needed; add another `-L 8001:127.0.0.1:8001` for the buyer REST server.)
+
 ## 5) Financial service (SOAP mock, stateless)
 ```
 python server_side/financial_service.py

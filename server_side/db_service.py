@@ -191,7 +191,7 @@ class DatabaseServiceServicer(database_pb2_grpc.DatabaseServiceServicer):
             context.abort(grpc.StatusCode.NOT_FOUND, "Item not found or unauthorized")
             
         current_qty = rows[0][0]
-        new_qty = current_qty + request.quantity_delta
+        new_qty = current_qty - request.quantity_delta
         if new_qty < 0:
             context.abort(grpc.StatusCode.FAILED_PRECONDITION, "Insufficient quantity")
             

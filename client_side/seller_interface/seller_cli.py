@@ -82,12 +82,15 @@ def main():
 
             # ---------- Item Management ----------
             elif cmd == "register_item":
+                if len(args) < 5:
+                    print("Usage: register_item <name> <category> <condition> <price> <quantity> [kw1 kw2 ...]")
+                    continue
                 name = args[0]
                 category = int(args[1])
                 condition = args[2]
                 price = float(args[3])
                 quantity = int(args[4])
-                keywords = args[5:]
+                keywords = args[5:]  # optional
 
                 item_id = client.register_item_for_sale(
                     item_name=name,

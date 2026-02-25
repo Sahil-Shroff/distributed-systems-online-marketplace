@@ -3,9 +3,9 @@
 import grpc
 import warnings
 
-from protos import database_pb2 as protos_dot_database__pb2
+import database_pb2 as database__pb2
 
-GRPC_GENERATED_VERSION = '1.75.1'
+GRPC_GENERATED_VERSION = '1.78.1'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 
@@ -18,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + f' but the generated code in protos/database_pb2_grpc.py depends on'
+        + ' but the generated code in database_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -36,108 +36,118 @@ class DatabaseServiceStub(object):
         """
         self.CreateAccount = channel.unary_unary(
                 '/marketplace.DatabaseService/CreateAccount',
-                request_serializer=protos_dot_database__pb2.CreateAccountRequest.SerializeToString,
-                response_deserializer=protos_dot_database__pb2.CreateAccountResponse.FromString,
+                request_serializer=database__pb2.CreateAccountRequest.SerializeToString,
+                response_deserializer=database__pb2.CreateAccountResponse.FromString,
                 _registered_method=True)
         self.AuthenticateUser = channel.unary_unary(
                 '/marketplace.DatabaseService/AuthenticateUser',
-                request_serializer=protos_dot_database__pb2.AuthenticateRequest.SerializeToString,
-                response_deserializer=protos_dot_database__pb2.AuthenticateResponse.FromString,
+                request_serializer=database__pb2.AuthenticateRequest.SerializeToString,
+                response_deserializer=database__pb2.AuthenticateResponse.FromString,
                 _registered_method=True)
         self.VerifySession = channel.unary_unary(
                 '/marketplace.DatabaseService/VerifySession',
-                request_serializer=protos_dot_database__pb2.VerifySessionRequest.SerializeToString,
-                response_deserializer=protos_dot_database__pb2.VerifySessionResponse.FromString,
+                request_serializer=database__pb2.VerifySessionRequest.SerializeToString,
+                response_deserializer=database__pb2.VerifySessionResponse.FromString,
                 _registered_method=True)
         self.DeleteSessions = channel.unary_unary(
                 '/marketplace.DatabaseService/DeleteSessions',
-                request_serializer=protos_dot_database__pb2.DeleteSessionsRequest.SerializeToString,
-                response_deserializer=protos_dot_database__pb2.Empty.FromString,
+                request_serializer=database__pb2.DeleteSessionsRequest.SerializeToString,
+                response_deserializer=database__pb2.Empty.FromString,
                 _registered_method=True)
         self.SearchItems = channel.unary_unary(
                 '/marketplace.DatabaseService/SearchItems',
-                request_serializer=protos_dot_database__pb2.SearchItemsRequest.SerializeToString,
-                response_deserializer=protos_dot_database__pb2.SearchItemsResponse.FromString,
+                request_serializer=database__pb2.SearchItemsRequest.SerializeToString,
+                response_deserializer=database__pb2.SearchItemsResponse.FromString,
                 _registered_method=True)
         self.GetItem = channel.unary_unary(
                 '/marketplace.DatabaseService/GetItem',
-                request_serializer=protos_dot_database__pb2.GetItemRequest.SerializeToString,
-                response_deserializer=protos_dot_database__pb2.Item.FromString,
+                request_serializer=database__pb2.GetItemRequest.SerializeToString,
+                response_deserializer=database__pb2.Item.FromString,
                 _registered_method=True)
         self.RegisterItem = channel.unary_unary(
                 '/marketplace.DatabaseService/RegisterItem',
-                request_serializer=protos_dot_database__pb2.RegisterItemRequest.SerializeToString,
-                response_deserializer=protos_dot_database__pb2.RegisterItemResponse.FromString,
+                request_serializer=database__pb2.RegisterItemRequest.SerializeToString,
+                response_deserializer=database__pb2.RegisterItemResponse.FromString,
                 _registered_method=True)
         self.UpdateItemPrice = channel.unary_unary(
                 '/marketplace.DatabaseService/UpdateItemPrice',
-                request_serializer=protos_dot_database__pb2.UpdateItemPriceRequest.SerializeToString,
-                response_deserializer=protos_dot_database__pb2.Empty.FromString,
+                request_serializer=database__pb2.UpdateItemPriceRequest.SerializeToString,
+                response_deserializer=database__pb2.Empty.FromString,
                 _registered_method=True)
         self.UpdateItemQuantity = channel.unary_unary(
                 '/marketplace.DatabaseService/UpdateItemQuantity',
-                request_serializer=protos_dot_database__pb2.UpdateItemQuantityRequest.SerializeToString,
-                response_deserializer=protos_dot_database__pb2.UpdateItemQuantityResponse.FromString,
+                request_serializer=database__pb2.UpdateItemQuantityRequest.SerializeToString,
+                response_deserializer=database__pb2.UpdateItemQuantityResponse.FromString,
                 _registered_method=True)
         self.GetItemsBySeller = channel.unary_unary(
                 '/marketplace.DatabaseService/GetItemsBySeller',
-                request_serializer=protos_dot_database__pb2.GetItemsBySellerRequest.SerializeToString,
-                response_deserializer=protos_dot_database__pb2.SearchItemsResponse.FromString,
+                request_serializer=database__pb2.GetItemsBySellerRequest.SerializeToString,
+                response_deserializer=database__pb2.SearchItemsResponse.FromString,
                 _registered_method=True)
         self.AddToCart = channel.unary_unary(
                 '/marketplace.DatabaseService/AddToCart',
-                request_serializer=protos_dot_database__pb2.AddToCartRequest.SerializeToString,
-                response_deserializer=protos_dot_database__pb2.Empty.FromString,
+                request_serializer=database__pb2.AddToCartRequest.SerializeToString,
+                response_deserializer=database__pb2.Empty.FromString,
                 _registered_method=True)
         self.GetCartItemQuantity = channel.unary_unary(
                 '/marketplace.DatabaseService/GetCartItemQuantity',
-                request_serializer=protos_dot_database__pb2.GetCartItemQuantityRequest.SerializeToString,
-                response_deserializer=protos_dot_database__pb2.QuantityResponse.FromString,
+                request_serializer=database__pb2.GetCartItemQuantityRequest.SerializeToString,
+                response_deserializer=database__pb2.QuantityResponse.FromString,
                 _registered_method=True)
         self.UpdateCartItem = channel.unary_unary(
                 '/marketplace.DatabaseService/UpdateCartItem',
-                request_serializer=protos_dot_database__pb2.UpdateCartItemRequest.SerializeToString,
-                response_deserializer=protos_dot_database__pb2.Empty.FromString,
+                request_serializer=database__pb2.UpdateCartItemRequest.SerializeToString,
+                response_deserializer=database__pb2.Empty.FromString,
                 _registered_method=True)
         self.SaveCart = channel.unary_unary(
                 '/marketplace.DatabaseService/SaveCart',
-                request_serializer=protos_dot_database__pb2.SaveCartRequest.SerializeToString,
-                response_deserializer=protos_dot_database__pb2.Empty.FromString,
+                request_serializer=database__pb2.SaveCartRequest.SerializeToString,
+                response_deserializer=database__pb2.Empty.FromString,
                 _registered_method=True)
         self.ClearCart = channel.unary_unary(
                 '/marketplace.DatabaseService/ClearCart',
-                request_serializer=protos_dot_database__pb2.ClearCartRequest.SerializeToString,
-                response_deserializer=protos_dot_database__pb2.Empty.FromString,
+                request_serializer=database__pb2.ClearCartRequest.SerializeToString,
+                response_deserializer=database__pb2.Empty.FromString,
                 _registered_method=True)
         self.ListCart = channel.unary_unary(
                 '/marketplace.DatabaseService/ListCart',
-                request_serializer=protos_dot_database__pb2.ListCartRequest.SerializeToString,
-                response_deserializer=protos_dot_database__pb2.CartListResponse.FromString,
+                request_serializer=database__pb2.ListCartRequest.SerializeToString,
+                response_deserializer=database__pb2.CartListResponse.FromString,
                 _registered_method=True)
         self.DeleteUnsavedCart = channel.unary_unary(
                 '/marketplace.DatabaseService/DeleteUnsavedCart',
-                request_serializer=protos_dot_database__pb2.DeleteUnsavedCartRequest.SerializeToString,
-                response_deserializer=protos_dot_database__pb2.Empty.FromString,
+                request_serializer=database__pb2.DeleteUnsavedCartRequest.SerializeToString,
+                response_deserializer=database__pb2.Empty.FromString,
+                _registered_method=True)
+        self.ListSavedCart = channel.unary_unary(
+                '/marketplace.DatabaseService/ListSavedCart',
+                request_serializer=database__pb2.ListSavedCartRequest.SerializeToString,
+                response_deserializer=database__pb2.CartListResponse.FromString,
+                _registered_method=True)
+        self.ClearSavedCart = channel.unary_unary(
+                '/marketplace.DatabaseService/ClearSavedCart',
+                request_serializer=database__pb2.ClearSavedCartRequest.SerializeToString,
+                response_deserializer=database__pb2.Empty.FromString,
                 _registered_method=True)
         self.ProvideFeedback = channel.unary_unary(
                 '/marketplace.DatabaseService/ProvideFeedback',
-                request_serializer=protos_dot_database__pb2.ProvideFeedbackRequest.SerializeToString,
-                response_deserializer=protos_dot_database__pb2.Empty.FromString,
+                request_serializer=database__pb2.ProvideFeedbackRequest.SerializeToString,
+                response_deserializer=database__pb2.Empty.FromString,
                 _registered_method=True)
         self.GetSellerRating = channel.unary_unary(
                 '/marketplace.DatabaseService/GetSellerRating',
-                request_serializer=protos_dot_database__pb2.GetSellerRatingRequest.SerializeToString,
-                response_deserializer=protos_dot_database__pb2.SellerRatingResponse.FromString,
+                request_serializer=database__pb2.GetSellerRatingRequest.SerializeToString,
+                response_deserializer=database__pb2.SellerRatingResponse.FromString,
                 _registered_method=True)
         self.GetPurchaseHistory = channel.unary_unary(
                 '/marketplace.DatabaseService/GetPurchaseHistory',
-                request_serializer=protos_dot_database__pb2.GetPurchaseHistoryRequest.SerializeToString,
-                response_deserializer=protos_dot_database__pb2.PurchaseHistoryResponse.FromString,
+                request_serializer=database__pb2.GetPurchaseHistoryRequest.SerializeToString,
+                response_deserializer=database__pb2.PurchaseHistoryResponse.FromString,
                 _registered_method=True)
         self.CreatePurchase = channel.unary_unary(
                 '/marketplace.DatabaseService/CreatePurchase',
-                request_serializer=protos_dot_database__pb2.CreatePurchaseRequest.SerializeToString,
-                response_deserializer=protos_dot_database__pb2.Empty.FromString,
+                request_serializer=database__pb2.CreatePurchaseRequest.SerializeToString,
+                response_deserializer=database__pb2.Empty.FromString,
                 _registered_method=True)
 
 
@@ -249,6 +259,18 @@ class DatabaseServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListSavedCart(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ClearSavedCart(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def ProvideFeedback(self, request, context):
         """--- Feedback / Rating ---
         """
@@ -280,108 +302,118 @@ def add_DatabaseServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'CreateAccount': grpc.unary_unary_rpc_method_handler(
                     servicer.CreateAccount,
-                    request_deserializer=protos_dot_database__pb2.CreateAccountRequest.FromString,
-                    response_serializer=protos_dot_database__pb2.CreateAccountResponse.SerializeToString,
+                    request_deserializer=database__pb2.CreateAccountRequest.FromString,
+                    response_serializer=database__pb2.CreateAccountResponse.SerializeToString,
             ),
             'AuthenticateUser': grpc.unary_unary_rpc_method_handler(
                     servicer.AuthenticateUser,
-                    request_deserializer=protos_dot_database__pb2.AuthenticateRequest.FromString,
-                    response_serializer=protos_dot_database__pb2.AuthenticateResponse.SerializeToString,
+                    request_deserializer=database__pb2.AuthenticateRequest.FromString,
+                    response_serializer=database__pb2.AuthenticateResponse.SerializeToString,
             ),
             'VerifySession': grpc.unary_unary_rpc_method_handler(
                     servicer.VerifySession,
-                    request_deserializer=protos_dot_database__pb2.VerifySessionRequest.FromString,
-                    response_serializer=protos_dot_database__pb2.VerifySessionResponse.SerializeToString,
+                    request_deserializer=database__pb2.VerifySessionRequest.FromString,
+                    response_serializer=database__pb2.VerifySessionResponse.SerializeToString,
             ),
             'DeleteSessions': grpc.unary_unary_rpc_method_handler(
                     servicer.DeleteSessions,
-                    request_deserializer=protos_dot_database__pb2.DeleteSessionsRequest.FromString,
-                    response_serializer=protos_dot_database__pb2.Empty.SerializeToString,
+                    request_deserializer=database__pb2.DeleteSessionsRequest.FromString,
+                    response_serializer=database__pb2.Empty.SerializeToString,
             ),
             'SearchItems': grpc.unary_unary_rpc_method_handler(
                     servicer.SearchItems,
-                    request_deserializer=protos_dot_database__pb2.SearchItemsRequest.FromString,
-                    response_serializer=protos_dot_database__pb2.SearchItemsResponse.SerializeToString,
+                    request_deserializer=database__pb2.SearchItemsRequest.FromString,
+                    response_serializer=database__pb2.SearchItemsResponse.SerializeToString,
             ),
             'GetItem': grpc.unary_unary_rpc_method_handler(
                     servicer.GetItem,
-                    request_deserializer=protos_dot_database__pb2.GetItemRequest.FromString,
-                    response_serializer=protos_dot_database__pb2.Item.SerializeToString,
+                    request_deserializer=database__pb2.GetItemRequest.FromString,
+                    response_serializer=database__pb2.Item.SerializeToString,
             ),
             'RegisterItem': grpc.unary_unary_rpc_method_handler(
                     servicer.RegisterItem,
-                    request_deserializer=protos_dot_database__pb2.RegisterItemRequest.FromString,
-                    response_serializer=protos_dot_database__pb2.RegisterItemResponse.SerializeToString,
+                    request_deserializer=database__pb2.RegisterItemRequest.FromString,
+                    response_serializer=database__pb2.RegisterItemResponse.SerializeToString,
             ),
             'UpdateItemPrice': grpc.unary_unary_rpc_method_handler(
                     servicer.UpdateItemPrice,
-                    request_deserializer=protos_dot_database__pb2.UpdateItemPriceRequest.FromString,
-                    response_serializer=protos_dot_database__pb2.Empty.SerializeToString,
+                    request_deserializer=database__pb2.UpdateItemPriceRequest.FromString,
+                    response_serializer=database__pb2.Empty.SerializeToString,
             ),
             'UpdateItemQuantity': grpc.unary_unary_rpc_method_handler(
                     servicer.UpdateItemQuantity,
-                    request_deserializer=protos_dot_database__pb2.UpdateItemQuantityRequest.FromString,
-                    response_serializer=protos_dot_database__pb2.UpdateItemQuantityResponse.SerializeToString,
+                    request_deserializer=database__pb2.UpdateItemQuantityRequest.FromString,
+                    response_serializer=database__pb2.UpdateItemQuantityResponse.SerializeToString,
             ),
             'GetItemsBySeller': grpc.unary_unary_rpc_method_handler(
                     servicer.GetItemsBySeller,
-                    request_deserializer=protos_dot_database__pb2.GetItemsBySellerRequest.FromString,
-                    response_serializer=protos_dot_database__pb2.SearchItemsResponse.SerializeToString,
+                    request_deserializer=database__pb2.GetItemsBySellerRequest.FromString,
+                    response_serializer=database__pb2.SearchItemsResponse.SerializeToString,
             ),
             'AddToCart': grpc.unary_unary_rpc_method_handler(
                     servicer.AddToCart,
-                    request_deserializer=protos_dot_database__pb2.AddToCartRequest.FromString,
-                    response_serializer=protos_dot_database__pb2.Empty.SerializeToString,
+                    request_deserializer=database__pb2.AddToCartRequest.FromString,
+                    response_serializer=database__pb2.Empty.SerializeToString,
             ),
             'GetCartItemQuantity': grpc.unary_unary_rpc_method_handler(
                     servicer.GetCartItemQuantity,
-                    request_deserializer=protos_dot_database__pb2.GetCartItemQuantityRequest.FromString,
-                    response_serializer=protos_dot_database__pb2.QuantityResponse.SerializeToString,
+                    request_deserializer=database__pb2.GetCartItemQuantityRequest.FromString,
+                    response_serializer=database__pb2.QuantityResponse.SerializeToString,
             ),
             'UpdateCartItem': grpc.unary_unary_rpc_method_handler(
                     servicer.UpdateCartItem,
-                    request_deserializer=protos_dot_database__pb2.UpdateCartItemRequest.FromString,
-                    response_serializer=protos_dot_database__pb2.Empty.SerializeToString,
+                    request_deserializer=database__pb2.UpdateCartItemRequest.FromString,
+                    response_serializer=database__pb2.Empty.SerializeToString,
             ),
             'SaveCart': grpc.unary_unary_rpc_method_handler(
                     servicer.SaveCart,
-                    request_deserializer=protos_dot_database__pb2.SaveCartRequest.FromString,
-                    response_serializer=protos_dot_database__pb2.Empty.SerializeToString,
+                    request_deserializer=database__pb2.SaveCartRequest.FromString,
+                    response_serializer=database__pb2.Empty.SerializeToString,
             ),
             'ClearCart': grpc.unary_unary_rpc_method_handler(
                     servicer.ClearCart,
-                    request_deserializer=protos_dot_database__pb2.ClearCartRequest.FromString,
-                    response_serializer=protos_dot_database__pb2.Empty.SerializeToString,
+                    request_deserializer=database__pb2.ClearCartRequest.FromString,
+                    response_serializer=database__pb2.Empty.SerializeToString,
             ),
             'ListCart': grpc.unary_unary_rpc_method_handler(
                     servicer.ListCart,
-                    request_deserializer=protos_dot_database__pb2.ListCartRequest.FromString,
-                    response_serializer=protos_dot_database__pb2.CartListResponse.SerializeToString,
+                    request_deserializer=database__pb2.ListCartRequest.FromString,
+                    response_serializer=database__pb2.CartListResponse.SerializeToString,
             ),
             'DeleteUnsavedCart': grpc.unary_unary_rpc_method_handler(
                     servicer.DeleteUnsavedCart,
-                    request_deserializer=protos_dot_database__pb2.DeleteUnsavedCartRequest.FromString,
-                    response_serializer=protos_dot_database__pb2.Empty.SerializeToString,
+                    request_deserializer=database__pb2.DeleteUnsavedCartRequest.FromString,
+                    response_serializer=database__pb2.Empty.SerializeToString,
+            ),
+            'ListSavedCart': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListSavedCart,
+                    request_deserializer=database__pb2.ListSavedCartRequest.FromString,
+                    response_serializer=database__pb2.CartListResponse.SerializeToString,
+            ),
+            'ClearSavedCart': grpc.unary_unary_rpc_method_handler(
+                    servicer.ClearSavedCart,
+                    request_deserializer=database__pb2.ClearSavedCartRequest.FromString,
+                    response_serializer=database__pb2.Empty.SerializeToString,
             ),
             'ProvideFeedback': grpc.unary_unary_rpc_method_handler(
                     servicer.ProvideFeedback,
-                    request_deserializer=protos_dot_database__pb2.ProvideFeedbackRequest.FromString,
-                    response_serializer=protos_dot_database__pb2.Empty.SerializeToString,
+                    request_deserializer=database__pb2.ProvideFeedbackRequest.FromString,
+                    response_serializer=database__pb2.Empty.SerializeToString,
             ),
             'GetSellerRating': grpc.unary_unary_rpc_method_handler(
                     servicer.GetSellerRating,
-                    request_deserializer=protos_dot_database__pb2.GetSellerRatingRequest.FromString,
-                    response_serializer=protos_dot_database__pb2.SellerRatingResponse.SerializeToString,
+                    request_deserializer=database__pb2.GetSellerRatingRequest.FromString,
+                    response_serializer=database__pb2.SellerRatingResponse.SerializeToString,
             ),
             'GetPurchaseHistory': grpc.unary_unary_rpc_method_handler(
                     servicer.GetPurchaseHistory,
-                    request_deserializer=protos_dot_database__pb2.GetPurchaseHistoryRequest.FromString,
-                    response_serializer=protos_dot_database__pb2.PurchaseHistoryResponse.SerializeToString,
+                    request_deserializer=database__pb2.GetPurchaseHistoryRequest.FromString,
+                    response_serializer=database__pb2.PurchaseHistoryResponse.SerializeToString,
             ),
             'CreatePurchase': grpc.unary_unary_rpc_method_handler(
                     servicer.CreatePurchase,
-                    request_deserializer=protos_dot_database__pb2.CreatePurchaseRequest.FromString,
-                    response_serializer=protos_dot_database__pb2.Empty.SerializeToString,
+                    request_deserializer=database__pb2.CreatePurchaseRequest.FromString,
+                    response_serializer=database__pb2.Empty.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -409,8 +441,8 @@ class DatabaseService(object):
             request,
             target,
             '/marketplace.DatabaseService/CreateAccount',
-            protos_dot_database__pb2.CreateAccountRequest.SerializeToString,
-            protos_dot_database__pb2.CreateAccountResponse.FromString,
+            database__pb2.CreateAccountRequest.SerializeToString,
+            database__pb2.CreateAccountResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -436,8 +468,8 @@ class DatabaseService(object):
             request,
             target,
             '/marketplace.DatabaseService/AuthenticateUser',
-            protos_dot_database__pb2.AuthenticateRequest.SerializeToString,
-            protos_dot_database__pb2.AuthenticateResponse.FromString,
+            database__pb2.AuthenticateRequest.SerializeToString,
+            database__pb2.AuthenticateResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -463,8 +495,8 @@ class DatabaseService(object):
             request,
             target,
             '/marketplace.DatabaseService/VerifySession',
-            protos_dot_database__pb2.VerifySessionRequest.SerializeToString,
-            protos_dot_database__pb2.VerifySessionResponse.FromString,
+            database__pb2.VerifySessionRequest.SerializeToString,
+            database__pb2.VerifySessionResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -490,8 +522,8 @@ class DatabaseService(object):
             request,
             target,
             '/marketplace.DatabaseService/DeleteSessions',
-            protos_dot_database__pb2.DeleteSessionsRequest.SerializeToString,
-            protos_dot_database__pb2.Empty.FromString,
+            database__pb2.DeleteSessionsRequest.SerializeToString,
+            database__pb2.Empty.FromString,
             options,
             channel_credentials,
             insecure,
@@ -517,8 +549,8 @@ class DatabaseService(object):
             request,
             target,
             '/marketplace.DatabaseService/SearchItems',
-            protos_dot_database__pb2.SearchItemsRequest.SerializeToString,
-            protos_dot_database__pb2.SearchItemsResponse.FromString,
+            database__pb2.SearchItemsRequest.SerializeToString,
+            database__pb2.SearchItemsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -544,8 +576,8 @@ class DatabaseService(object):
             request,
             target,
             '/marketplace.DatabaseService/GetItem',
-            protos_dot_database__pb2.GetItemRequest.SerializeToString,
-            protos_dot_database__pb2.Item.FromString,
+            database__pb2.GetItemRequest.SerializeToString,
+            database__pb2.Item.FromString,
             options,
             channel_credentials,
             insecure,
@@ -571,8 +603,8 @@ class DatabaseService(object):
             request,
             target,
             '/marketplace.DatabaseService/RegisterItem',
-            protos_dot_database__pb2.RegisterItemRequest.SerializeToString,
-            protos_dot_database__pb2.RegisterItemResponse.FromString,
+            database__pb2.RegisterItemRequest.SerializeToString,
+            database__pb2.RegisterItemResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -598,8 +630,8 @@ class DatabaseService(object):
             request,
             target,
             '/marketplace.DatabaseService/UpdateItemPrice',
-            protos_dot_database__pb2.UpdateItemPriceRequest.SerializeToString,
-            protos_dot_database__pb2.Empty.FromString,
+            database__pb2.UpdateItemPriceRequest.SerializeToString,
+            database__pb2.Empty.FromString,
             options,
             channel_credentials,
             insecure,
@@ -625,8 +657,8 @@ class DatabaseService(object):
             request,
             target,
             '/marketplace.DatabaseService/UpdateItemQuantity',
-            protos_dot_database__pb2.UpdateItemQuantityRequest.SerializeToString,
-            protos_dot_database__pb2.UpdateItemQuantityResponse.FromString,
+            database__pb2.UpdateItemQuantityRequest.SerializeToString,
+            database__pb2.UpdateItemQuantityResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -652,8 +684,8 @@ class DatabaseService(object):
             request,
             target,
             '/marketplace.DatabaseService/GetItemsBySeller',
-            protos_dot_database__pb2.GetItemsBySellerRequest.SerializeToString,
-            protos_dot_database__pb2.SearchItemsResponse.FromString,
+            database__pb2.GetItemsBySellerRequest.SerializeToString,
+            database__pb2.SearchItemsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -679,8 +711,8 @@ class DatabaseService(object):
             request,
             target,
             '/marketplace.DatabaseService/AddToCart',
-            protos_dot_database__pb2.AddToCartRequest.SerializeToString,
-            protos_dot_database__pb2.Empty.FromString,
+            database__pb2.AddToCartRequest.SerializeToString,
+            database__pb2.Empty.FromString,
             options,
             channel_credentials,
             insecure,
@@ -706,8 +738,8 @@ class DatabaseService(object):
             request,
             target,
             '/marketplace.DatabaseService/GetCartItemQuantity',
-            protos_dot_database__pb2.GetCartItemQuantityRequest.SerializeToString,
-            protos_dot_database__pb2.QuantityResponse.FromString,
+            database__pb2.GetCartItemQuantityRequest.SerializeToString,
+            database__pb2.QuantityResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -733,8 +765,8 @@ class DatabaseService(object):
             request,
             target,
             '/marketplace.DatabaseService/UpdateCartItem',
-            protos_dot_database__pb2.UpdateCartItemRequest.SerializeToString,
-            protos_dot_database__pb2.Empty.FromString,
+            database__pb2.UpdateCartItemRequest.SerializeToString,
+            database__pb2.Empty.FromString,
             options,
             channel_credentials,
             insecure,
@@ -760,8 +792,8 @@ class DatabaseService(object):
             request,
             target,
             '/marketplace.DatabaseService/SaveCart',
-            protos_dot_database__pb2.SaveCartRequest.SerializeToString,
-            protos_dot_database__pb2.Empty.FromString,
+            database__pb2.SaveCartRequest.SerializeToString,
+            database__pb2.Empty.FromString,
             options,
             channel_credentials,
             insecure,
@@ -787,8 +819,8 @@ class DatabaseService(object):
             request,
             target,
             '/marketplace.DatabaseService/ClearCart',
-            protos_dot_database__pb2.ClearCartRequest.SerializeToString,
-            protos_dot_database__pb2.Empty.FromString,
+            database__pb2.ClearCartRequest.SerializeToString,
+            database__pb2.Empty.FromString,
             options,
             channel_credentials,
             insecure,
@@ -814,8 +846,8 @@ class DatabaseService(object):
             request,
             target,
             '/marketplace.DatabaseService/ListCart',
-            protos_dot_database__pb2.ListCartRequest.SerializeToString,
-            protos_dot_database__pb2.CartListResponse.FromString,
+            database__pb2.ListCartRequest.SerializeToString,
+            database__pb2.CartListResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -841,8 +873,62 @@ class DatabaseService(object):
             request,
             target,
             '/marketplace.DatabaseService/DeleteUnsavedCart',
-            protos_dot_database__pb2.DeleteUnsavedCartRequest.SerializeToString,
-            protos_dot_database__pb2.Empty.FromString,
+            database__pb2.DeleteUnsavedCartRequest.SerializeToString,
+            database__pb2.Empty.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListSavedCart(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/marketplace.DatabaseService/ListSavedCart',
+            database__pb2.ListSavedCartRequest.SerializeToString,
+            database__pb2.CartListResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ClearSavedCart(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/marketplace.DatabaseService/ClearSavedCart',
+            database__pb2.ClearSavedCartRequest.SerializeToString,
+            database__pb2.Empty.FromString,
             options,
             channel_credentials,
             insecure,
@@ -868,8 +954,8 @@ class DatabaseService(object):
             request,
             target,
             '/marketplace.DatabaseService/ProvideFeedback',
-            protos_dot_database__pb2.ProvideFeedbackRequest.SerializeToString,
-            protos_dot_database__pb2.Empty.FromString,
+            database__pb2.ProvideFeedbackRequest.SerializeToString,
+            database__pb2.Empty.FromString,
             options,
             channel_credentials,
             insecure,
@@ -895,8 +981,8 @@ class DatabaseService(object):
             request,
             target,
             '/marketplace.DatabaseService/GetSellerRating',
-            protos_dot_database__pb2.GetSellerRatingRequest.SerializeToString,
-            protos_dot_database__pb2.SellerRatingResponse.FromString,
+            database__pb2.GetSellerRatingRequest.SerializeToString,
+            database__pb2.SellerRatingResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -922,8 +1008,8 @@ class DatabaseService(object):
             request,
             target,
             '/marketplace.DatabaseService/GetPurchaseHistory',
-            protos_dot_database__pb2.GetPurchaseHistoryRequest.SerializeToString,
-            protos_dot_database__pb2.PurchaseHistoryResponse.FromString,
+            database__pb2.GetPurchaseHistoryRequest.SerializeToString,
+            database__pb2.PurchaseHistoryResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -949,8 +1035,8 @@ class DatabaseService(object):
             request,
             target,
             '/marketplace.DatabaseService/CreatePurchase',
-            protos_dot_database__pb2.CreatePurchaseRequest.SerializeToString,
-            protos_dot_database__pb2.Empty.FromString,
+            database__pb2.CreatePurchaseRequest.SerializeToString,
+            database__pb2.Empty.FromString,
             options,
             channel_credentials,
             insecure,

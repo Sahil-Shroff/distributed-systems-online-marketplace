@@ -231,7 +231,7 @@ def make_purchase(data: PurchaseModel, x_session_id: str = Header(None)):
     for item, qty in items_to_buy:
         # Deduct quantity
         db_stub.UpdateItemQuantity(database_pb2.UpdateItemQuantityRequest(
-            item_id=item.item_id, seller_id=item.seller_id, quantity_delta=-qty
+            item_id=item.item_id, seller_id=item.seller_id, quantity_delta=qty
         ))
         # Create purchase record
         db_stub.CreatePurchase(database_pb2.CreatePurchaseRequest(

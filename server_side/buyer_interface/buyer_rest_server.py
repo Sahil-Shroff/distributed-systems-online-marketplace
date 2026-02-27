@@ -202,6 +202,20 @@ def get_purchases(x_session_id: str = Header(None)):
 def make_purchase(data: PurchaseModel, x_session_id: str = Header(None)):
     user_id, _ = verify_session(x_session_id)
 
+    # Basic card validation to return clear client errors (assignment requirement)
+    def _bad(detail: str):
+        raise HTTPException(status_code=400, detail=detail)
+
+    if not data.card_number.isdigit() or not (12 <= len(data.card_number) <= 19):
+        _bad("Invalid card number format")
+    if not data.security_code.isdigit() or len(data.security_code) not in (3, 4):
+        _bad("Invalid security code format")
+    if "/" in data.expiration_date:
+        parts = data.expiration_date.split("/")
+        if len(parts) != 2 or not all(p.isdigit() for p in parts):
+            _bad("Invalid expiration date format")
+    # else accept other formats (e.g., YYYY or YYYY-MM) without strict parsing
+
     # 1. Get saved cart (shared across sessions)
     saved = db_stub.ListSavedCart(database_pb2.ListSavedCartRequest(buyer_id=user_id))
     if not saved.items:

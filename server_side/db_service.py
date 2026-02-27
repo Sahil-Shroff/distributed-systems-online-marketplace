@@ -230,6 +230,14 @@ class DatabaseServiceServicer(database_pb2_grpc.DatabaseServiceServicer):
         )
         return database_pb2.Empty()
 
+    def RemoveFromCart(self, request, context):
+        self.product_db.execute(
+            "DELETE FROM cart_items WHERE buyer_id = %s AND session_id = %s AND item_id = %s AND is_saved = FALSE",
+            (request.buyer_id, request.session_id, request.item_id),
+            fetch=False
+        )
+        return database_pb2.Empty()
+
     def GetCartItemQuantity(self, request, context):
         row = self.product_db.execute(
             "SELECT quantity FROM cart_items WHERE buyer_id = %s AND session_id = %s AND item_id = %s AND is_saved = FALSE",

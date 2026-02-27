@@ -160,12 +160,21 @@ def save_cart(x_session_id: str = Header(None)):
     ))
     return {"status": "success"}
 
+@app.delete("/buyer/cart/{item_id}")
+def remove_from_cart(item_id: int, x_session_id: str = Header(None)):
+    user_id, _ = verify_session(x_session_id)
+    db_stub.RemoveFromCart(database_pb2.RemoveFromCartRequest(
+        buyer_id=user_id, session_id=x_session_id, item_id=item_id
+    ))
+    return {"status": "success"}
+
 @app.delete("/buyer/cart/all")
 def clear_cart(x_session_id: str = Header(None)):
     user_id, _ = verify_session(x_session_id)
     db_stub.ClearCart(database_pb2.ClearCartRequest(
         buyer_id=user_id, session_id=x_session_id
     ))
+    db_stub.ClearSavedCart(database_pb2.ClearSavedCartRequest(buyer_id=user_id))
     return {"status": "success"}
 
 @app.post("/buyer/feedback")

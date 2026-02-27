@@ -168,7 +168,7 @@ def remove_from_cart(item_id: int, x_session_id: str = Header(None)):
     ))
     return {"status": "success"}
 
-@app.delete("/buyer/cart/all")
+@app.delete("/buyer/cart/clear")
 def clear_cart(x_session_id: str = Header(None)):
     user_id, _ = verify_session(x_session_id)
     db_stub.ClearCart(database_pb2.ClearCartRequest(

@@ -19,6 +19,7 @@ service DatabaseService {
 
     // --- Cart Operations ---
     rpc AddToCart(AddToCartRequest) returns (Empty);
+    rpc RemoveFromCart(RemoveFromCartRequest) returns (Empty);
     rpc GetCartItemQuantity(GetCartItemQuantityRequest) returns (QuantityResponse);
     rpc UpdateCartItem(UpdateCartItemRequest) returns (Empty);
     rpc SaveCart(SaveCartRequest) returns (Empty);
@@ -139,6 +140,12 @@ message AddToCartRequest {
     string session_id = 2;
     int32 item_id = 3;
     int32 quantity = 4;
+}
+
+message RemoveFromCartRequest {
+    int32 buyer_id = 1;
+    string session_id = 2;
+    int32 item_id = 3;
 }
 
 message GetCartItemQuantityRequest {

@@ -18,7 +18,7 @@ Browsing:
 
 Cart:
   add_to_cart <item_id> <quantity>
-  remove_from_cart <item_id> <quantity>
+  remove_from_cart <item_id> [quantity]
   display_cart
   clear_cart
   save_cart
@@ -106,9 +106,14 @@ def main():
                 print("Cart updated:", cart)
 
             elif cmd == "remove_from_cart":
-                item_id, qty = args
-                cart = client.remove_item_from_cart(item_id, int(qty))
-                print("Cart updated:", cart)
+                if len(args) == 2:
+                    item_id, qty = args
+                    cart = client.remove_item_from_cart(item_id, int(qty))
+                    print("Cart updated:", cart)
+                else:
+                    item_id = args[0]
+                    cart = client.remove_item_from_cart(item_id, None)
+                    print("Cart updated:", cart)
 
             elif cmd == "display_cart":
                 cart = client.display_cart()

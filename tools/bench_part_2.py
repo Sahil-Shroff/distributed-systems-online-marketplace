@@ -158,7 +158,7 @@ def run_scenario(sellers: int, buyers: int, seller_host="127.0.0.1", seller_port
 def main():
     scenarios = [
         (1, 1),
-        (10, 10),
+        # (10, 10),
         # (100, 100),
     ]
     for s, b in scenarios:

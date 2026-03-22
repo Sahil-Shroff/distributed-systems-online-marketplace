@@ -191,7 +191,7 @@ class DatabaseServiceServicer(database_pb2_grpc.DatabaseServiceServicer):
             context.abort(grpc.StatusCode.NOT_FOUND, "Item not found or unauthorized")
             
         current_qty = rows[0][0]
-        new_qty = current_qty + request.quantity_delta
+        new_qty = current_qty - request.quantity_delta
         if new_qty < 0:
             context.abort(grpc.StatusCode.FAILED_PRECONDITION, "Insufficient quantity")
             
@@ -226,6 +226,14 @@ class DatabaseServiceServicer(database_pb2_grpc.DatabaseServiceServicer):
             SET quantity = cart_items.quantity + EXCLUDED.quantity
             """,
             (request.buyer_id, request.session_id, request.item_id, request.quantity),
+            fetch=False
+        )
+        return database_pb2.Empty()
+
+    def RemoveFromCart(self, request, context):
+        self.product_db.execute(
+            "DELETE FROM cart_items WHERE buyer_id = %s AND session_id = %s AND item_id = %s AND is_saved = FALSE",
+            (request.buyer_id, request.session_id, request.item_id),
             fetch=False
         )
         return database_pb2.Empty()

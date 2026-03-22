@@ -160,12 +160,21 @@ def save_cart(x_session_id: str = Header(None)):
     ))
     return {"status": "success"}
 
-@app.delete("/buyer/cart/all")
+@app.delete("/buyer/cart/{item_id}")
+def remove_from_cart(item_id: int, x_session_id: str = Header(None)):
+    user_id, _ = verify_session(x_session_id)
+    db_stub.RemoveFromCart(database_pb2.RemoveFromCartRequest(
+        buyer_id=user_id, session_id=x_session_id, item_id=item_id
+    ))
+    return {"status": "success"}
+
+@app.delete("/buyer/cart/clear")
 def clear_cart(x_session_id: str = Header(None)):
     user_id, _ = verify_session(x_session_id)
     db_stub.ClearCart(database_pb2.ClearCartRequest(
         buyer_id=user_id, session_id=x_session_id
     ))
+    db_stub.ClearSavedCart(database_pb2.ClearSavedCartRequest(buyer_id=user_id))
     return {"status": "success"}
 
 @app.post("/buyer/feedback")
@@ -192,6 +201,20 @@ def get_purchases(x_session_id: str = Header(None)):
 @app.post("/buyer/purchase")
 def make_purchase(data: PurchaseModel, x_session_id: str = Header(None)):
     user_id, _ = verify_session(x_session_id)
+
+    # Basic card validation to return clear client errors (assignment requirement)
+    def _bad(detail: str):
+        raise HTTPException(status_code=400, detail=detail)
+
+    if not data.card_number.isdigit() or not (12 <= len(data.card_number) <= 19):
+        _bad("Invalid card number format")
+    if not data.security_code.isdigit() or len(data.security_code) not in (3, 4):
+        _bad("Invalid security code format")
+    if "/" in data.expiration_date:
+        parts = data.expiration_date.split("/")
+        if len(parts) != 2 or not all(p.isdigit() for p in parts):
+            _bad("Invalid expiration date format")
+    # else accept other formats (e.g., YYYY or YYYY-MM) without strict parsing
 
     # 1. Get saved cart (shared across sessions)
     saved = db_stub.ListSavedCart(database_pb2.ListSavedCartRequest(buyer_id=user_id))
@@ -231,7 +254,7 @@ def make_purchase(data: PurchaseModel, x_session_id: str = Header(None)):
     for item, qty in items_to_buy:
         # Deduct quantity
         db_stub.UpdateItemQuantity(database_pb2.UpdateItemQuantityRequest(
-            item_id=item.item_id, seller_id=item.seller_id, quantity_delta=-qty
+            item_id=item.item_id, seller_id=item.seller_id, quantity_delta=qty
         ))
         # Create purchase record
         db_stub.CreatePurchase(database_pb2.CreatePurchaseRequest(

@@ -89,6 +89,11 @@ class DatabaseServiceStub(object):
                 request_serializer=database__pb2.AddToCartRequest.SerializeToString,
                 response_deserializer=database__pb2.Empty.FromString,
                 _registered_method=True)
+        self.RemoveFromCart = channel.unary_unary(
+                '/marketplace.DatabaseService/RemoveFromCart',
+                request_serializer=database__pb2.RemoveFromCartRequest.SerializeToString,
+                response_deserializer=database__pb2.Empty.FromString,
+                _registered_method=True)
         self.GetCartItemQuantity = channel.unary_unary(
                 '/marketplace.DatabaseService/GetCartItemQuantity',
                 request_serializer=database__pb2.GetCartItemQuantityRequest.SerializeToString,
@@ -223,6 +228,12 @@ class DatabaseServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def RemoveFromCart(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def GetCartItemQuantity(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -353,6 +364,11 @@ def add_DatabaseServiceServicer_to_server(servicer, server):
             'AddToCart': grpc.unary_unary_rpc_method_handler(
                     servicer.AddToCart,
                     request_deserializer=database__pb2.AddToCartRequest.FromString,
+                    response_serializer=database__pb2.Empty.SerializeToString,
+            ),
+            'RemoveFromCart': grpc.unary_unary_rpc_method_handler(
+                    servicer.RemoveFromCart,
+                    request_deserializer=database__pb2.RemoveFromCartRequest.FromString,
                     response_serializer=database__pb2.Empty.SerializeToString,
             ),
             'GetCartItemQuantity': grpc.unary_unary_rpc_method_handler(
@@ -712,6 +728,33 @@ class DatabaseService(object):
             target,
             '/marketplace.DatabaseService/AddToCart',
             database__pb2.AddToCartRequest.SerializeToString,
+            database__pb2.Empty.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RemoveFromCart(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/marketplace.DatabaseService/RemoveFromCart',
+            database__pb2.RemoveFromCartRequest.SerializeToString,
             database__pb2.Empty.FromString,
             options,
             channel_credentials,

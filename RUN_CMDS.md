@@ -1,6 +1,6 @@
 # PA3 Run Commands
 
-## 1) Create/reset local replica databases
+## 1) Create/reset local replica SQLite databases
 ```powershell
 python run.py setup-customer-replica-dbs --count 5 --reset
 ```
@@ -12,7 +12,8 @@ python run.py db-service
 
 Typical per-replica env vars:
 ```powershell
-$env:CUSTOMER_DB_NAME='customer-db-replica_0'
+$env:CUSTOMER_DB_NAME='customer-database.sqlite'
+$env:CUSTOMER_DB_PATH='database\customer-db-replica_0\customer-database.sqlite'
 $env:CUSTOMER_DB_REPLICA_ID='0'
 $env:CUSTOMER_DB_REPLICA_PEERS='0:127.0.0.1:56061,1:127.0.0.1:56062,2:127.0.0.1:56063,3:127.0.0.1:56064,4:127.0.0.1:56065'
 $env:CUSTOMER_DB_REPLICATION_BIND_HOST='127.0.0.1'

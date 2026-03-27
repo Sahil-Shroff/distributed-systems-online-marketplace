@@ -1,6 +1,5 @@
 grpcio>=1.76.0
 grpcio-tools>=1.76.0
-psycopg2-binary>=2.9.11
 python-dotenv>=1.0.1
 requests>=2.32.3
 spyne>=2.14.0

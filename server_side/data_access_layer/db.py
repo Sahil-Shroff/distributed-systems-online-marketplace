@@ -1,5 +1,6 @@
 import os
-from psycopg2.pool import SimpleConnectionPool
+import sqlite3
+from pathlib import Path
 
 try:
     from dotenv import load_dotenv
@@ -12,51 +13,70 @@ class Database_Connection:
     def __init__(
         self,
         db_name: str | None = None,
-        host: str | None = None,
-        port: int | None = None,
-        user: str | None = None,
-        password: str | None = None,
-        options: str | None = None,
+        db_path: str | None = None,
+        init_schema: str | None = None,
     ):
-        self.host = host or os.getenv("PGHOST", "localhost")
-        self.port = int(port or os.getenv("PGPORT", "5434"))
         self.db_name = db_name
-        self.user = user or os.getenv("PGUSER", "postgres")
-        self.password = password or os.getenv("PGPASSWORD")
-        self.options = options
-        if not self.password:
-            raise RuntimeError("PGPASSWORD not set. Store it in .env or environment variables.")
-        self.DB_POOL = None
-        print(f"Connecting to DB at {self.host}:{self.port} with user {self.user}...")
+        self.db_path = db_path
+        self.init_schema = init_schema
+        self.sqlite_path: str | None = None
+        print(f"Connecting to SQLite database {self._resolve_sqlite_path()}...")
         self._connect()
 
     def _connect(self):
-        self.DB_POOL = SimpleConnectionPool(
-            minconn=1,
-            maxconn=5,
-            host=self.host,
-            port=self.port,
-            dbname=self.db_name,
-            user=self.user,
-            password=self.password,
-            options=self.options,
-        )
+        self.sqlite_path = self._resolve_sqlite_path()
+        conn = self.connect_sqlite()
+        try:
+            conn.execute("PRAGMA journal_mode = WAL")
+            conn.execute("PRAGMA foreign_keys = ON")
+            if self.init_schema:
+                conn.executescript(self.init_schema)
+            conn.commit()
+        finally:
+            conn.close()
 
     def execute(self, query: str, params=None, fetch: bool = False):
-        conn = self.DB_POOL.getconn()
+        conn = self.connect_sqlite()
         try:
-            with conn, conn.cursor() as cur:
-                cur.execute(query, params)
-                return cur.fetchall() if fetch else None
+            cur = conn.cursor()
+            cur.execute(self._sqlite_query(query), self._sqlite_params(params))
+            rows = cur.fetchall() if fetch else None
+            conn.commit()
+            return [tuple(row) for row in rows] if rows is not None else None
         finally:
-            self.DB_POOL.putconn(conn)
+            conn.close()
+
+    def connect_sqlite(self):
+        if self.sqlite_path is None:
+            self.sqlite_path = self._resolve_sqlite_path()
+        return sqlite3.connect(self.sqlite_path, timeout=30, check_same_thread=False)
+
+    def _resolve_sqlite_path(self) -> str:
+        if self.db_path:
+            path = Path(self.db_path)
+        elif self.db_name:
+            path = Path(self.db_name)
+            if not path.is_absolute():
+                repo_root = Path(__file__).resolve().parents[2]
+                path = repo_root / "database" / path
+        else:
+            repo_root = Path(__file__).resolve().parents[2]
+            path = repo_root / "database" / "app.sqlite"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return str(path)
+
+    @staticmethod
+    def _sqlite_query(query: str) -> str:
+        return query.replace("%s", "?")
+
+    @staticmethod
+    def _sqlite_params(params):
+        if params is None:
+            return ()
+        return tuple(params)
 
     def close(self):
-        if self.DB_POOL:
-            try:
-                self.DB_POOL.closeall()
-            finally:
-                self.DB_POOL = None
+        self.sqlite_path = None
 
 
             

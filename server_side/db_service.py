@@ -1,7 +1,7 @@
+import json
 import os
 import grpc
 from concurrent import futures
-import time
 
 # Add generated directory to sys.path
 import sys
@@ -14,12 +14,13 @@ if str(REPO_ROOT) not in sys.path:
 
 from protos import database_pb2
 from protos import database_pb2_grpc
-from server_side.customer_db.backends.postgres import PostgresCustomerRepository, PostgresIdAllocator
+from server_side.customer_db.backends.sqlite import CUSTOMER_SQLITE_SCHEMA, SQLiteCustomerRepository, SQLiteIdAllocator
 from server_side.customer_db.models import SESSION_TTL
 from server_side.customer_db.operations import Operation
 from server_side.customer_db.replication.runtime import CustomerDbReplicationRuntime
 from server_side.customer_db.service import AuthenticationError, CustomerDbService, SessionError
 from server_side.data_access_layer.db import Database_Connection
+from server_side.sqlite_schemas import CUSTOMER_SQLITE_DEFAULT_DB, PRODUCT_SQLITE_DEFAULT_DB, PRODUCT_SQLITE_SCHEMA
 
 try:
     from dotenv import load_dotenv
@@ -29,28 +30,20 @@ except Exception:
 
 class DatabaseServiceServicer(database_pb2_grpc.DatabaseServiceServicer):
     def __init__(self):
-        # Customer DB connection (defaults to PG* envs)
         self.customer_db = Database_Connection(
-            os.getenv("CUSTOMER_DB_NAME", "customer-database"),
-            host=os.getenv("CUSTOMER_PGHOST") or os.getenv("PGHOST", "localhost"),
-            port=int(os.getenv("CUSTOMER_PGPORT") or os.getenv("PGPORT", "5434")),
-            user=os.getenv("CUSTOMER_PGUSER") or os.getenv("PGUSER", "postgres"),
-            password=os.getenv("CUSTOMER_PGPASSWORD") or os.getenv("PGPASSWORD"),
-            options=os.getenv("CUSTOMER_PGOPTIONS") or os.getenv("PGOPTIONS"),
+            os.getenv("CUSTOMER_DB_NAME", CUSTOMER_SQLITE_DEFAULT_DB),
+            db_path=os.getenv("CUSTOMER_DB_PATH"),
+            init_schema=CUSTOMER_SQLITE_SCHEMA,
         )
-        # Product DB connection (can point to a different host)
         self.product_db = Database_Connection(
-            os.getenv("PRODUCT_DB_NAME", "product-database"),
-            host=os.getenv("PRODUCT_PGHOST") or os.getenv("PGHOST", "localhost"),
-            port=int(os.getenv("PRODUCT_PGPORT") or os.getenv("PGPORT", "5434")),
-            user=os.getenv("PRODUCT_PGUSER") or os.getenv("PGUSER", "postgres"),
-            password=os.getenv("PRODUCT_PGPASSWORD") or os.getenv("PGPASSWORD"),
-            options=os.getenv("PRODUCT_PGOPTIONS") or os.getenv("PGOPTIONS"),
+            os.getenv("PRODUCT_DB_NAME", PRODUCT_SQLITE_DEFAULT_DB),
+            db_path=os.getenv("PRODUCT_DB_PATH"),
+            init_schema=PRODUCT_SQLITE_SCHEMA,
         )
-        self.customer_repo = PostgresCustomerRepository(self.customer_db)
+        self.customer_repo = SQLiteCustomerRepository(self.customer_db)
         self.customer_service = CustomerDbService(
             repository=self.customer_repo,
-            allocator=PostgresIdAllocator(self.customer_db),
+            allocator=SQLiteIdAllocator(self.customer_db),
         )
         self.customer_replication = CustomerDbReplicationRuntime.from_env(
             apply_callback=self.customer_service.apply_replicated,
@@ -140,23 +133,18 @@ class DatabaseServiceServicer(database_pb2_grpc.DatabaseServiceServicer):
     def SearchItems(self, request, context):
         query = "SELECT item_id, item_name, category, keywords, condition_is_new, sale_price, quantity, seller_id FROM items WHERE quantity > 0"
         params = []
-        
+
         if request.category != 0:
             query += " AND category = %s"
             params.append(request.category)
-            
-        if request.keywords:
-            # Better Search Semantics: matches ANY of the keywords
-            query += " AND keywords && %s"
-            params.append(list(request.keywords))
-            
+
         rows = self.product_db.execute(query, tuple(params), fetch=True) or []
         items = []
-        for r in rows:
-            items.append(database_pb2.Item(
-                item_id=r[0], item_name=r[1], category=r[2], keywords=r[3],
-                condition_is_new=r[4], price=float(r[5]), quantity=r[6], seller_id=r[7]
-            ))
+        for row in rows:
+            item = self._item_from_row(row)
+            if request.keywords and not set(item.keywords).intersection(request.keywords):
+                continue
+            items.append(item)
         return database_pb2.SearchItemsResponse(items=items)
 
     def GetItem(self, request, context):
@@ -167,11 +155,7 @@ class DatabaseServiceServicer(database_pb2_grpc.DatabaseServiceServicer):
         )
         if not rows:
             context.abort(grpc.StatusCode.NOT_FOUND, "Item not found")
-        r = rows[0]
-        return database_pb2.Item(
-            item_id=r[0], item_name=r[1], category=r[2], keywords=r[3],
-            condition_is_new=r[4], price=float(r[5]), quantity=r[6], seller_id=r[7]
-        )
+        return self._item_from_row(rows[0])
 
     def RegisterItem(self, request, context):
         condition_is_new = request.condition.lower() in ("new", "brand new", "mint")
@@ -181,7 +165,15 @@ class DatabaseServiceServicer(database_pb2_grpc.DatabaseServiceServicer):
             VALUES (%s, %s, %s, %s, %s, %s, %s)
             RETURNING item_id
             """,
-            (request.item_name, request.category, list(request.keywords), condition_is_new, request.price, request.quantity, request.seller_id),
+            (
+                request.item_name,
+                request.category,
+                self._encode_keywords(list(request.keywords)),
+                condition_is_new,
+                request.price,
+                request.quantity,
+                request.seller_id,
+            ),
             fetch=True
         )
         item_id = rows[0][0] if rows else 0
@@ -226,10 +218,7 @@ class DatabaseServiceServicer(database_pb2_grpc.DatabaseServiceServicer):
         ) or []
         items = []
         for r in rows:
-            items.append(database_pb2.Item(
-                item_id=r[0], item_name=r[1], category=r[2], keywords=r[3],
-                condition_is_new=r[4], price=float(r[5]), quantity=r[6], seller_id=r[7]
-            ))
+            items.append(self._item_from_row(r))
         return database_pb2.SearchItemsResponse(items=items)
 
     # --- Cart Operations ---
@@ -344,22 +333,25 @@ class DatabaseServiceServicer(database_pb2_grpc.DatabaseServiceServicer):
 
     # --- Feedback / Rating ---
     def ProvideFeedback(self, request, context):
-        # Update Item Feedback
-        col = "thumbs_up" if request.is_positive else "thumbs_down"
-        # We need to find the seller_id first for the combined update or handle them separately
         rows = self.product_db.execute("SELECT seller_id FROM items WHERE item_id = %s", (request.item_id,), fetch=True)
         if not rows:
             context.abort(grpc.StatusCode.NOT_FOUND, "Item not found")
         seller_id = rows[0][0]
-        
-        # In this simplistic impl, let's assume item_feedback is a structured col or just increment it
-        # Requirement: "Item feedback: <integer number of thumbs up, integer number of thumbs down>"
-        # Assuming schema: item_feedback INTEGER[] DEFAULT ARRAY[0, 0]
-        idx = 1 if request.is_positive else 2
-        self.product_db.execute(
-            f"UPDATE items SET item_feedback[{idx}] = item_feedback[{idx}] + 1 WHERE item_id = %s",
+
+        feedback_row = self.product_db.execute(
+            "SELECT item_feedback FROM items WHERE item_id = %s",
             (request.item_id,),
-            fetch=False
+            fetch=True,
+        )
+        feedback = json.loads(feedback_row[0][0]) if feedback_row and feedback_row[0][0] else [0, 0]
+        if request.is_positive:
+            feedback[0] += 1
+        else:
+            feedback[1] += 1
+        self.product_db.execute(
+            "UPDATE items SET item_feedback = %s WHERE item_id = %s",
+            (json.dumps(feedback), request.item_id),
+            fetch=False,
         )
         operation = self.customer_service.build_update_seller_feedback(
             seller_id=seller_id,
@@ -407,6 +399,24 @@ class DatabaseServiceServicer(database_pb2_grpc.DatabaseServiceServicer):
             except TimeoutError as e:
                 context.abort(grpc.StatusCode.DEADLINE_EXCEEDED, str(e))
         return database_pb2.Empty()
+
+    def _item_from_row(self, row):
+        return database_pb2.Item(
+            item_id=row[0],
+            item_name=row[1],
+            category=row[2],
+            keywords=self._decode_keywords(row[3]),
+            condition_is_new=bool(row[4]),
+            price=float(row[5]),
+            quantity=row[6],
+            seller_id=row[7],
+        )
+
+    def _encode_keywords(self, keywords):
+        return json.dumps(keywords)
+
+    def _decode_keywords(self, raw_keywords):
+        return list(json.loads(raw_keywords)) if raw_keywords else []
 
 def serve():
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))

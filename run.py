@@ -37,7 +37,7 @@ def run_customer_db_replica_cluster(args):
     try:
         print("Customer-db replica cluster running:")
         for replica in cluster.replicas:
-            db_name = cluster.database_names[replica.replica_id] if cluster.database_names else replica.schema
+            db_name = cluster.database_paths[replica.replica_id]
             print(
                 f"  replica={replica.replica_id} grpc={replica.grpc_target} "
                 f"udp={replica.udp_host}:{replica.udp_port} db={db_name}"

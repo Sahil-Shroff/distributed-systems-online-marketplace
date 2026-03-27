@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 import sys
 import time
 import unittest
 
 import grpc
-import psycopg2
 
 from server_side.customer_db.replication.local_cluster import LocalCustomerDbReplicaCluster
-from server_side.customer_db.tests.postgres_support import postgres_dsn
 
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
@@ -61,29 +60,29 @@ class CustomerDbReplicationGrpcSmokeTests(unittest.TestCase):
             self.assertEqual(verified.user_id, seller_id)
             self.assertEqual(verified.role, "seller")
 
-            for schema in self.cluster.schemas:
-                self.assertEqual(self._seller_count(schema, seller_id), 1)
-                self.assertEqual(self._session_count(schema, authenticated.session_id), 1)
+            for db_path in self.cluster.database_paths:
+                self.assertEqual(self._seller_count(db_path, seller_id), 1)
+                self.assertEqual(self._session_count(db_path, authenticated.session_id), 1)
         finally:
             create_channel.close()
             auth_channel.close()
             verify_channel.close()
 
-    def _seller_count(self, schema: str, seller_id: int) -> int:
-        conn = psycopg2.connect(options=f"-c search_path={schema}", **postgres_dsn())
+    def _seller_count(self, db_path: str, seller_id: int) -> int:
+        conn = sqlite3.connect(db_path)
         try:
-            with conn, conn.cursor() as cur:
-                cur.execute("SELECT COUNT(*) FROM sellers WHERE seller_id = %s", (seller_id,))
-                return int(cur.fetchone()[0])
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM sellers WHERE seller_id = ?", (seller_id,))
+            return int(cur.fetchone()[0])
         finally:
             conn.close()
 
-    def _session_count(self, schema: str, session_id: str) -> int:
-        conn = psycopg2.connect(options=f"-c search_path={schema}", **postgres_dsn())
+    def _session_count(self, db_path: str, session_id: str) -> int:
+        conn = sqlite3.connect(db_path)
         try:
-            with conn, conn.cursor() as cur:
-                cur.execute("SELECT COUNT(*) FROM sessions WHERE session_id = %s", (int(session_id),))
-                return int(cur.fetchone()[0])
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM sessions WHERE session_id = ?", (session_id,))
+            return int(cur.fetchone()[0])
         finally:
             conn.close()
 

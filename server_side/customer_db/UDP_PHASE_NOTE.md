@@ -191,4 +191,4 @@ Passing tests cover:
 - rotating sequencer selection by `k mod n`
 - retransmit recovery for dropped `Request`
 - in-memory customer-db behavior
-- Postgres parity scaffolding for later backend validation
+- SQLite-backed persistence scaffolding for local replica validation

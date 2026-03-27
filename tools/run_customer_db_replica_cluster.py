@@ -35,7 +35,7 @@ def main() -> None:
         for replica in cluster.replicas:
             print(
                 f"  replica={replica.replica_id} grpc={replica.grpc_target} "
-                f"udp={replica.udp_host}:{replica.udp_port} schema={replica.schema}"
+                f"udp={replica.udp_host}:{replica.udp_port} db={cluster.database_paths[replica.replica_id]}"
             )
         print("Press Ctrl+C to stop.")
         while True:

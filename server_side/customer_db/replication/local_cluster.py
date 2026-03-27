@@ -1,18 +1,17 @@
 from __future__ import annotations
 
 import os
+import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
-import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
 import grpc
-import psycopg2
-
-from server_side.customer_db.tests.postgres_support import CUSTOMER_SCHEMA_DDL, postgres_dsn
+from server_side.sqlite_schemas import CUSTOMER_SQLITE_DEFAULT_DB
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -38,7 +37,6 @@ class ReplicaProcess:
     grpc_port: int
     udp_host: str
     udp_port: int
-    schema: str
     process: subprocess.Popen[str]
 
     @property
@@ -54,24 +52,25 @@ class LocalCustomerDbReplicaCluster:
         udp_base_port: int = 51061,
         host: str = "127.0.0.1",
         database_prefix: str | None = None,
+        sqlite_db_name: str = CUSTOMER_SQLITE_DEFAULT_DB,
     ):
         self.replica_count = replica_count
         self.grpc_base_port = grpc_base_port
         self.udp_base_port = udp_base_port
         self.host = host
         self.database_prefix = database_prefix
-        self.schemas: list[str] = []
-        self.database_names: list[str] = []
+        self.sqlite_db_name = sqlite_db_name
+        self.database_paths: list[str] = []
+        self._temp_root: str | None = None
         self.replicas: list[ReplicaProcess] = []
 
     def start(self, startup_timeout_seconds: float = 10.0) -> None:
-        self._create_schemas()
+        self._create_storage()
         peer_spec = ",".join(
             f"{replica_id}:{self.host}:{self.udp_base_port + replica_id}"
             for replica_id in range(self.replica_count)
         )
         for replica_id in range(self.replica_count):
-            schema = self.schemas[replica_id] if self.schemas else ""
             env = os.environ.copy()
             env.update(
                 {
@@ -83,11 +82,8 @@ class LocalCustomerDbReplicaCluster:
                     "CUSTOMER_DB_REPLICATION_BIND_PORT": str(self.udp_base_port + replica_id),
                 }
             )
-            if self.database_names:
-                env["CUSTOMER_DB_NAME"] = self.database_names[replica_id]
-                env.pop("CUSTOMER_PGOPTIONS", None)
-            else:
-                env["CUSTOMER_PGOPTIONS"] = f"-c search_path={schema}"
+            env["CUSTOMER_DB_NAME"] = self.sqlite_db_name
+            env["CUSTOMER_DB_PATH"] = self.database_paths[replica_id]
             process = subprocess.Popen(
                 [sys.executable, "server_side/db_service.py"],
                 cwd=str(REPO_ROOT),
@@ -103,7 +99,6 @@ class LocalCustomerDbReplicaCluster:
                     grpc_port=self.grpc_base_port + replica_id,
                     udp_host=self.host,
                     udp_port=self.udp_base_port + replica_id,
-                    schema=schema,
                     process=process,
                 )
             )
@@ -130,7 +125,7 @@ class LocalCustomerDbReplicaCluster:
                 except Exception:
                     pass
         self.replicas.clear()
-        self._drop_schemas()
+        self._drop_storage()
 
     def wait_for_grpc_ready(self, timeout_seconds: float = 10.0) -> None:
         deadline = time.time() + timeout_seconds
@@ -154,33 +149,23 @@ class LocalCustomerDbReplicaCluster:
                 outputs[replica.replica_id] = ""
         return outputs
 
-    def _create_schemas(self) -> None:
+    def _create_storage(self) -> None:
         if self.database_prefix:
-            self.database_names = [f"{self.database_prefix}{idx}" for idx in range(self.replica_count)]
+            base_root = REPO_ROOT / "database"
+            base_root.mkdir(parents=True, exist_ok=True)
+            for replica_id in range(self.replica_count):
+                replica_dir = base_root / f"{self.database_prefix}{replica_id}"
+                replica_dir.mkdir(parents=True, exist_ok=True)
+                self.database_paths.append(str(replica_dir / self.sqlite_db_name))
             return
-        root_conn = psycopg2.connect(**postgres_dsn())
-        try:
-            with root_conn, root_conn.cursor() as cur:
-                for _ in range(self.replica_count):
-                    schema = f"customer_udp_{uuid.uuid4().hex[:8]}"
-                    self.schemas.append(schema)
-                    cur.execute(f"CREATE SCHEMA {schema}")
-                    cur.execute(f"SET search_path TO {schema}")
-                    cur.execute(CUSTOMER_SCHEMA_DDL)
-        finally:
-            root_conn.close()
+        self._temp_root = tempfile.mkdtemp(prefix="customer-db-replicas-")
+        for replica_id in range(self.replica_count):
+            replica_dir = Path(self._temp_root) / f"replica_{replica_id}"
+            replica_dir.mkdir(parents=True, exist_ok=True)
+            self.database_paths.append(str(replica_dir / self.sqlite_db_name))
 
-    def _drop_schemas(self) -> None:
-        if self.database_names:
-            self.database_names.clear()
-            return
-        if not self.schemas:
-            return
-        root_conn = psycopg2.connect(**postgres_dsn())
-        try:
-            with root_conn, root_conn.cursor() as cur:
-                for schema in self.schemas:
-                    cur.execute(f"DROP SCHEMA IF EXISTS {schema} CASCADE")
-        finally:
-            root_conn.close()
-        self.schemas.clear()
+    def _drop_storage(self) -> None:
+        self.database_paths.clear()
+        if self._temp_root is not None:
+            shutil.rmtree(self._temp_root, ignore_errors=True)
+            self._temp_root = None

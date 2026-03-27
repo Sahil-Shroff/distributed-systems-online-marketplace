@@ -1,7 +1,7 @@
 # PA3 Customer-DB Replication
 
 This repository now contains the PA3 customer-database implementation centered on:
-- PostgreSQL-backed customer-db state
+- SQLite-backed customer-db state
 - deterministic customer-db operations
 - rotating-sequencer atomic broadcast over UDP
 - gRPC service entrypoints for customer-db mutations and reads
@@ -14,7 +14,7 @@ This repository now contains the PA3 customer-database implementation centered o
 - [server_side/customer_db/replication](f:/MS%20CS/Distributed%20Systems/distributed-systems-online-marketplace/server_side/customer_db/replication)
   - UDP transport, rotating sequencer node, runtime, local cluster helper
 - [tools/setup_customer_replica_dbs.py](f:/MS%20CS/Distributed%20Systems/distributed-systems-online-marketplace/tools/setup_customer_replica_dbs.py)
-  - creates local replica databases
+  - creates local replica SQLite databases
 - [tools/customer_db_replication_smoke.py](f:/MS%20CS/Distributed%20Systems/distributed-systems-online-marketplace/tools/customer_db_replication_smoke.py)
   - end-to-end replicated smoke test
 
@@ -47,8 +47,8 @@ generated/
   protos/
 
 database/
-  create_dbs.*
-  drop_dbs.*
+  customer-db-replica_*/
+  *.sqlite
 ```
 
 ## Local Workflow

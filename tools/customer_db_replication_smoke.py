@@ -85,14 +85,14 @@ def main() -> None:
             )
         )
 
-        schemas = cluster.schemas if cluster is not None else []
+        db_paths = cluster.database_paths if cluster is not None else []
         print(
             {
                 "created_seller_id": created.user_id,
                 "authenticated_user_id": authenticated.user_id,
                 "session_id": authenticated.session_id,
                 "verified_role": verified.role,
-                "schemas": schemas,
+                "db_paths": db_paths,
                 "targets": replica_targets,
             }
         )

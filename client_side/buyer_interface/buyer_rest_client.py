@@ -46,6 +46,9 @@ class BuyerRestClient:
     def add_to_cart(self, item_id: int, quantity: int):
         self._auth_post(f"{self.base}/buyer/cart", json={"item_id": item_id, "quantity": quantity})
 
+    def remove_from_cart(self, item_id: int):
+        self._auth_delete(f"{self.base}/buyer/cart/{item_id}")
+
     def display_cart(self):
         resp = self._auth_get(f"{self.base}/buyer/cart")
         return resp.json().get("cart", [])
@@ -54,11 +57,20 @@ class BuyerRestClient:
         self._auth_post(f"{self.base}/buyer/cart/save")
 
     def clear_cart(self):
-        self._auth_delete(f"{self.base}/buyer/cart/all")
+        self._auth_delete(f"{self.base}/buyer/cart/clear")
 
     # --- Feedback ---
     def provide_feedback(self, item_id: int, is_positive: bool):
         self._auth_post(f"{self.base}/buyer/feedback", json={"item_id": item_id, "is_positive": bool(is_positive)})
+
+    def get_seller_rating(self, seller_id: int):
+        resp = requests.get(f"{self.base}/seller/{seller_id}/rating", headers=self._headers())
+        resp.raise_for_status()
+        return resp.json()
+
+    def get_purchases(self):
+        resp = self._auth_get(f"{self.base}/buyer/purchases")
+        return resp.json().get("purchases", [])
 
     # --- Purchase ---
     def purchase(self, name: str, card_number: str, expiration_date: str, security_code: str):

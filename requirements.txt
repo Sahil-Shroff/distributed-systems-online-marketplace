@@ -14,5 +14,8 @@ lxml>=4.9.4
 # Database
 psycopg2-binary>=2.9.11
 
+# Raft replication
+pysyncobj>=0.3.15
+
 # Validation (pulled by FastAPI, explicit for clarity)
 pydantic>=1.10

@@ -1,4 +1,5 @@
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from server_side.seller_interface.seller_server import SellerServer
 from server_side.buyer_interface.buyer_server import BuyerServer
 from server_side.buyer_interface import buyer_rest_server
 from server_side.seller_interface import seller_rest_server
+from server_side import product_service
 from client_side.common.tcp_client import TCPClient
 from client_side.seller_interface.seller_client import SellerClient
 from client_side.buyer_interface.buyer_client import BuyerClient
@@ -55,6 +57,11 @@ def run_seller_rest_server(args):
         port=args.port,
         reload=False,
     )
+
+def run_product_service(args):
+    os.environ["PRODUCT_SERVICE_BIND"] = f"{args.host}:{args.port}"
+    os.environ["PRODUCT_SERVICE_PORT"] = str(args.port)
+    product_service.serve()
 
 
 def run_seller_client(args):
@@ -152,6 +159,12 @@ def main():
     p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--port", type=int, default=8000)
     p.set_defaults(func=run_seller_rest_server)
+
+    # product Raft service
+    p = sub.add_parser("product-service", help="Run product Raft service")
+    p.add_argument("--host", default="0.0.0.0")
+    p.add_argument("--port", type=int, default=50052)
+    p.set_defaults(func=run_product_service)
 
     args = parser.parse_args()
     args.func(args)

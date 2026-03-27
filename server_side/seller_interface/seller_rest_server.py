@@ -15,9 +15,13 @@ from protos import database_pb2_grpc
 app = FastAPI(title="Marketplace Seller API")
 
 # gRPC Setup
-DB_SERVICE_ADDR = os.getenv("DB_SERVICE_ADDR", "localhost:50051")
-channel = grpc.insecure_channel(DB_SERVICE_ADDR)
-db_stub = database_pb2_grpc.DatabaseServiceStub(channel)
+DEFAULT_DB_ADDR = os.getenv("DB_SERVICE_ADDR", "localhost:50051")
+CUSTOMER_SERVICE_ADDR = os.getenv("CUSTOMER_SERVICE_ADDR", DEFAULT_DB_ADDR)
+PRODUCT_SERVICE_ADDR = os.getenv("PRODUCT_SERVICE_ADDR", DEFAULT_DB_ADDR)
+customer_channel = grpc.insecure_channel(CUSTOMER_SERVICE_ADDR)
+product_channel = grpc.insecure_channel(PRODUCT_SERVICE_ADDR)
+customer_stub = database_pb2_grpc.DatabaseServiceStub(customer_channel)
+product_stub = database_pb2_grpc.DatabaseServiceStub(product_channel)
 
 # --- Models ---
 class CreateAccountModel(BaseModel):
@@ -47,7 +51,7 @@ def verify_session(session_id: str):
     if not session_id:
         raise HTTPException(status_code=401, detail="Session ID required")
     try:
-        resp = db_stub.VerifySession(database_pb2.VerifySessionRequest(session_id=session_id))
+        resp = customer_stub.VerifySession(database_pb2.VerifySessionRequest(session_id=session_id))
         return resp.user_id, resp.role
     except grpc.RpcError as e:
         if e.code() == grpc.StatusCode.UNAUTHENTICATED:
@@ -59,7 +63,7 @@ def verify_session(session_id: str):
 @app.post("/seller/account")
 def create_account(data: CreateAccountModel):
     try:
-        resp = db_stub.CreateAccount(database_pb2.CreateAccountRequest(
+        resp = customer_stub.CreateAccount(database_pb2.CreateAccountRequest(
             role="seller", username=data.username, password=data.password
         ))
         return {"seller_id": resp.user_id}
@@ -69,7 +73,7 @@ def create_account(data: CreateAccountModel):
 @app.post("/seller/login")
 def login(data: LoginModel):
     try:
-        resp = db_stub.AuthenticateUser(database_pb2.AuthenticateRequest(
+        resp = customer_stub.AuthenticateUser(database_pb2.AuthenticateRequest(
             role="seller", username=data.username, password=data.password
         ))
         return {"session_id": resp.session_id, "seller_id": resp.user_id}
@@ -79,7 +83,7 @@ def login(data: LoginModel):
 @app.post("/seller/logout")
 def logout(x_session_id: str = Header(None)):
     user_id, role = verify_session(x_session_id)
-    db_stub.DeleteSessions(database_pb2.DeleteSessionsRequest(
+    customer_stub.DeleteSessions(database_pb2.DeleteSessionsRequest(
         session_id=x_session_id, user_id=user_id, role=role, scope="single"
     ))
     return {"status": "success"}
@@ -87,7 +91,7 @@ def logout(x_session_id: str = Header(None)):
 @app.get("/seller/rating")
 def get_seller_rating(x_session_id: str = Header(None)):
     user_id, _ = verify_session(x_session_id)
-    resp = db_stub.GetSellerRating(database_pb2.GetSellerRatingRequest(seller_id=user_id))
+    resp = customer_stub.GetSellerRating(database_pb2.GetSellerRatingRequest(seller_id=user_id))
     total = resp.pos + resp.neg
     rating = float(resp.pos) / total if total > 0 else 0.0
     return {"rating": rating, "pos": int(resp.pos), "neg": int(resp.neg)}
@@ -95,7 +99,7 @@ def get_seller_rating(x_session_id: str = Header(None)):
 @app.post("/seller/items")
 def register_item(data: RegisterItemModel, x_session_id: str = Header(None)):
     user_id, _ = verify_session(x_session_id)
-    resp = db_stub.RegisterItem(database_pb2.RegisterItemRequest(
+    resp = product_stub.RegisterItem(database_pb2.RegisterItemRequest(
         item_name=data.item_name,
         category=data.category,
         keywords=data.keywords,
@@ -110,7 +114,7 @@ def register_item(data: RegisterItemModel, x_session_id: str = Header(None)):
 def update_price(item_id: int, data: UpdatePriceModel, x_session_id: str = Header(None)):
     user_id, _ = verify_session(x_session_id)
     try:
-        db_stub.UpdateItemPrice(database_pb2.UpdateItemPriceRequest(
+        product_stub.UpdateItemPrice(database_pb2.UpdateItemPriceRequest(
             item_id=item_id, seller_id=user_id, price=data.price
         ))
         return {"status": "success"}
@@ -123,7 +127,7 @@ def update_price(item_id: int, data: UpdatePriceModel, x_session_id: str = Heade
 def update_quantity(item_id: int, data: UpdateQuantityModel, x_session_id: str = Header(None)):
     user_id, _ = verify_session(x_session_id)
     try:
-        resp = db_stub.UpdateItemQuantity(database_pb2.UpdateItemQuantityRequest(
+        resp = product_stub.UpdateItemQuantity(database_pb2.UpdateItemQuantityRequest(
             item_id=item_id, seller_id=user_id, quantity_delta=data.quantity_delta
         ))
         return {"status": "success", "new_quantity": resp.new_quantity}
@@ -137,7 +141,7 @@ def update_quantity(item_id: int, data: UpdateQuantityModel, x_session_id: str =
 @app.get("/seller/items")
 def display_items(x_session_id: str = Header(None)):
     user_id, _ = verify_session(x_session_id)
-    resp = db_stub.GetItemsBySeller(database_pb2.GetItemsBySellerRequest(seller_id=user_id))
+    resp = product_stub.GetItemsBySeller(database_pb2.GetItemsBySellerRequest(seller_id=user_id))
     items = []
     for item in resp.items:
         items.append({

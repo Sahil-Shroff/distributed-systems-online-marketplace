@@ -14,6 +14,11 @@ if str(REPO_ROOT) not in sys.path:
 
 from protos import database_pb2
 from protos import database_pb2_grpc
+from server_side.customer_db.backends.postgres import PostgresCustomerRepository, PostgresIdAllocator
+from server_side.customer_db.models import SESSION_TTL
+from server_side.customer_db.operations import Operation
+from server_side.customer_db.replication.runtime import CustomerDbReplicationRuntime
+from server_side.customer_db.service import AuthenticationError, CustomerDbService, SessionError
 from server_side.data_access_layer.db import Database_Connection
 
 try:
@@ -31,6 +36,7 @@ class DatabaseServiceServicer(database_pb2_grpc.DatabaseServiceServicer):
             port=int(os.getenv("CUSTOMER_PGPORT") or os.getenv("PGPORT", "5434")),
             user=os.getenv("CUSTOMER_PGUSER") or os.getenv("PGUSER", "postgres"),
             password=os.getenv("CUSTOMER_PGPASSWORD") or os.getenv("PGPASSWORD"),
+            options=os.getenv("CUSTOMER_PGOPTIONS") or os.getenv("PGOPTIONS"),
         )
         # Product DB connection (can point to a different host)
         self.product_db = Database_Connection(
@@ -39,85 +45,95 @@ class DatabaseServiceServicer(database_pb2_grpc.DatabaseServiceServicer):
             port=int(os.getenv("PRODUCT_PGPORT") or os.getenv("PGPORT", "5434")),
             user=os.getenv("PRODUCT_PGUSER") or os.getenv("PGUSER", "postgres"),
             password=os.getenv("PRODUCT_PGPASSWORD") or os.getenv("PGPASSWORD"),
+            options=os.getenv("PRODUCT_PGOPTIONS") or os.getenv("PGOPTIONS"),
         )
+        self.customer_repo = PostgresCustomerRepository(self.customer_db)
+        self.customer_service = CustomerDbService(
+            repository=self.customer_repo,
+            allocator=PostgresIdAllocator(self.customer_db),
+        )
+        self.customer_replication = CustomerDbReplicationRuntime.from_env(
+            apply_callback=self.customer_service.apply_replicated,
+        )
+        if self.customer_replication is not None:
+            self.customer_replication.start()
+
+    def _apply_customer_operation(self, operation: Operation) -> None:
+        if self.customer_replication is not None:
+            timeout_seconds = float(os.getenv("CUSTOMER_DB_REPLICATION_DELIVERY_TIMEOUT", "5.0"))
+            self.customer_replication.submit(operation, timeout=timeout_seconds)
+            return
+        self.customer_service.apply_replicated(operation)
 
     # --- Account / Session Operations ---
     def CreateAccount(self, request, context):
-        table = "buyers" if request.role == "buyer" else "sellers"
-        id_col = "buyer_id" if request.role == "buyer" else "seller_id"
-        
         try:
-            rows = self.customer_db.execute(
-                f"INSERT INTO {table} (username, password) VALUES (%s, %s) RETURNING {id_col}",
-                (request.username, request.password),
-                fetch=True
-            )
-            user_id = rows[0][0] if rows else 0
+            if request.role == "buyer":
+                operation = self.customer_service.build_create_buyer(request.username, request.password)
+                self._apply_customer_operation(operation)
+                user_id = operation.buyer_id
+            else:
+                operation = self.customer_service.build_create_seller(request.username, request.password)
+                self._apply_customer_operation(operation)
+                user_id = operation.seller_id
             return database_pb2.CreateAccountResponse(user_id=user_id)
+        except TimeoutError as e:
+            context.abort(grpc.StatusCode.DEADLINE_EXCEEDED, str(e))
         except Exception as e:
             context.abort(grpc.StatusCode.ALREADY_EXISTS, str(e))
 
     def AuthenticateUser(self, request, context):
-        table = "buyers" if request.role == "buyer" else "sellers"
-        id_col = "buyer_id" if request.role == "buyer" else "seller_id"
-        
-        rows = self.customer_db.execute(
-            f"SELECT {id_col} FROM {table} WHERE username = %s AND password = %s",
-            (request.username, request.password),
-            fetch=True
-        )
-        if not rows:
-            context.abort(grpc.StatusCode.UNAUTHENTICATED, "Invalid username or password")
-            
-        user_id = rows[0][0]
-        
-        # Create session
-        self.customer_db.execute(
-            "INSERT INTO sessions (role, user_id, last_access_timestamp) VALUES (%s, %s, NOW())",
-            (request.role, user_id),
-            fetch=False
-        )
-        
-        rows = self.customer_db.execute(
-            "SELECT session_id FROM sessions WHERE role = %s AND user_id = %s ORDER BY last_access_timestamp DESC LIMIT 1",
-            (request.role, user_id),
-            fetch=True
-        )
-        session_id = str(rows[0][0]) if rows else ""
-        return database_pb2.AuthenticateResponse(user_id=user_id, session_id=session_id)
+        try:
+            if request.role == "buyer":
+                buyer = self.customer_repo.get_buyer_by_username_password(request.username, request.password)
+                if buyer is None:
+                    raise AuthenticationError("Invalid username or password")
+                operation = self.customer_service.build_create_session(role="buyer", user_id=buyer.buyer_id)
+                self._apply_customer_operation(operation)
+                return database_pb2.AuthenticateResponse(user_id=buyer.buyer_id, session_id=operation.session_id)
+            seller = self.customer_repo.get_seller_by_username_password(request.username, request.password)
+            if seller is None:
+                raise AuthenticationError("Invalid username or password")
+            operation = self.customer_service.build_create_session(role="seller", user_id=seller.seller_id)
+            self._apply_customer_operation(operation)
+            return database_pb2.AuthenticateResponse(user_id=seller.seller_id, session_id=operation.session_id)
+        except AuthenticationError as e:
+            context.abort(grpc.StatusCode.UNAUTHENTICATED, str(e))
+        except TimeoutError as e:
+            context.abort(grpc.StatusCode.DEADLINE_EXCEEDED, str(e))
 
     def VerifySession(self, request, context):
-        # Atomic Touch Logic from PA1
-        rows = self.customer_db.execute(
-            """
-            UPDATE sessions 
-            SET last_access_timestamp = NOW() 
-            WHERE session_id = %s 
-              AND last_access_timestamp > NOW() - INTERVAL '5 minutes'
-            RETURNING user_id, role
-            """,
-            (request.session_id,),
-            fetch=True
-        )
-        if not rows:
-            context.abort(grpc.StatusCode.UNAUTHENTICATED, "Session invalid or expired")
-            
-        user_id, role = rows[0]
-        return database_pb2.VerifySessionResponse(user_id=user_id, role=role)
+        try:
+            observed_at = self.customer_service.clock.now()
+            session = self.customer_repo.get_session(request.session_id)
+            if session is None or session.last_access_timestamp <= observed_at - SESSION_TTL:
+                raise SessionError("Session invalid or expired")
+            operation = self.customer_service.build_touch_session(request.session_id, touched_at=observed_at)
+            self._apply_customer_operation(operation)
+            refreshed = self.customer_repo.get_session(request.session_id)
+            if refreshed is None:
+                raise SessionError("Session invalid or expired")
+            return database_pb2.VerifySessionResponse(
+                user_id=refreshed.user_id,
+                role=refreshed.role,
+            )
+        except SessionError as e:
+            context.abort(grpc.StatusCode.UNAUTHENTICATED, str(e))
+        except TimeoutError as e:
+            context.abort(grpc.StatusCode.DEADLINE_EXCEEDED, str(e))
 
     def DeleteSessions(self, request, context):
         if request.scope == "all":
-            self.customer_db.execute(
-                "DELETE FROM sessions WHERE user_id = %s AND role = %s",
-                (request.user_id, request.role),
-                fetch=False
+            operation = self.customer_service.build_delete_sessions_for_user_role(
+                user_id=request.user_id,
+                role=request.role,
             )
         else:
-            self.customer_db.execute(
-                "DELETE FROM sessions WHERE session_id = %s",
-                (request.session_id,),
-                fetch=False
-            )
+            operation = self.customer_service.build_delete_session(request.session_id)
+        try:
+            self._apply_customer_operation(operation)
+        except TimeoutError as e:
+            context.abort(grpc.StatusCode.DEADLINE_EXCEEDED, str(e))
         return database_pb2.Empty()
 
     # --- Item Operations ---
@@ -345,24 +361,20 @@ class DatabaseServiceServicer(database_pb2_grpc.DatabaseServiceServicer):
             (request.item_id,),
             fetch=False
         )
-        
-        # Requirement: "Seller feedback: <integer number of thumbs up, integer number of thumbs down>"
-        self.customer_db.execute(
-            f"UPDATE sellers SET seller_feedback[{idx}] = seller_feedback[{idx}] + 1 WHERE seller_id = %s",
-            (seller_id,),
-            fetch=False
+        operation = self.customer_service.build_update_seller_feedback(
+            seller_id=seller_id,
+            is_positive=request.is_positive,
         )
+        try:
+            self._apply_customer_operation(operation)
+        except TimeoutError as e:
+            context.abort(grpc.StatusCode.DEADLINE_EXCEEDED, str(e))
         return database_pb2.Empty()
 
     def GetSellerRating(self, request, context):
-        rows = self.customer_db.execute(
-            "SELECT seller_feedback FROM sellers WHERE seller_id = %s",
-            (request.seller_id,),
-            fetch=True
-        )
-        if not rows:
+        feedback = self.customer_service.get_seller_feedback_counts(request.seller_id)
+        if feedback is None:
             return database_pb2.SellerRatingResponse(pos=0, neg=0)
-        feedback = rows[0][0] # feedback is expected to be [pos, neg]
         return database_pb2.SellerRatingResponse(pos=feedback[0], neg=feedback[1])
 
     # --- Purchases ---
@@ -381,21 +393,19 @@ class DatabaseServiceServicer(database_pb2_grpc.DatabaseServiceServicer):
             (request.buyer_id, request.item_id, request.quantity),
             fetch=False
         )
-        # Requirement: update items_purchased for buyer and items_sold for seller
-        self.customer_db.execute(
-            "UPDATE buyers SET items_purchased = items_purchased + %s WHERE buyer_id = %s",
-            (request.quantity, request.buyer_id),
-            fetch=False
-        )
         # Find seller
         rows = self.product_db.execute("SELECT seller_id FROM items WHERE item_id = %s", (request.item_id,), fetch=True)
         if rows:
             seller_id = rows[0][0]
-            self.customer_db.execute(
-                "UPDATE sellers SET items_sold = items_sold + %s WHERE seller_id = %s",
-                (request.quantity, seller_id),
-                fetch=False
+            operation = self.customer_service.build_complete_purchase(
+                buyer_id=request.buyer_id,
+                seller_id=seller_id,
+                quantity=request.quantity,
             )
+            try:
+                self._apply_customer_operation(operation)
+            except TimeoutError as e:
+                context.abort(grpc.StatusCode.DEADLINE_EXCEEDED, str(e))
         return database_pb2.Empty()
 
 def serve():

@@ -16,12 +16,14 @@ class Database_Connection:
         port: int | None = None,
         user: str | None = None,
         password: str | None = None,
+        options: str | None = None,
     ):
         self.host = host or os.getenv("PGHOST", "localhost")
         self.port = int(port or os.getenv("PGPORT", "5434"))
         self.db_name = db_name
         self.user = user or os.getenv("PGUSER", "postgres")
         self.password = password or os.getenv("PGPASSWORD")
+        self.options = options
         if not self.password:
             raise RuntimeError("PGPASSWORD not set. Store it in .env or environment variables.")
         self.DB_POOL = None
@@ -37,6 +39,7 @@ class Database_Connection:
             dbname=self.db_name,
             user=self.user,
             password=self.password,
+            options=self.options,
         )
 
     def execute(self, query: str, params=None, fetch: bool = False):

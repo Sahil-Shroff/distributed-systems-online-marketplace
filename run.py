@@ -18,6 +18,7 @@ import client_side.seller_interface.seller_cli as seller_cli
 import client_side.buyer_interface.buyer_cli as buyer_cli
 import client_side.seller_interface.seller_rest_cli as seller_rest_cli
 import client_side.buyer_interface.buyer_rest_cli as buyer_rest_cli
+from server_side.customer_db.replication.local_cluster import LocalCustomerDbReplicaCluster
 import uvicorn
 
 
@@ -89,6 +90,33 @@ def run_buyer_rest_cli(args):
     buyer_rest_cli.main()
 
 
+def run_customer_db_replica_cluster(args):
+    cluster = LocalCustomerDbReplicaCluster(
+        replica_count=args.replicas,
+        grpc_base_port=args.grpc_base_port,
+        udp_base_port=args.udp_base_port,
+        host=args.host,
+        database_prefix=args.database_prefix,
+    )
+    cluster.start()
+    cluster.wait_for_grpc_ready()
+    try:
+        print("Customer-db replica cluster running:")
+        for replica in cluster.replicas:
+            print(
+                f"  replica={replica.replica_id} grpc={replica.grpc_target} "
+                f"udp={replica.udp_host}:{replica.udp_port} schema={replica.schema}"
+            )
+        print("Press Ctrl+C to stop.")
+        import time
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        cluster.stop()
+
+
 def main():
     parser = argparse.ArgumentParser(description="Run marketplace components.")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -152,6 +180,15 @@ def main():
     p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--port", type=int, default=8000)
     p.set_defaults(func=run_seller_rest_server)
+
+    # customer-db replica cluster
+    p = sub.add_parser("customer-db-replica-cluster", help="Run a local multi-process customer-db replica cluster")
+    p.add_argument("--replicas", type=int, default=5)
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--grpc-base-port", type=int, default=55061)
+    p.add_argument("--udp-base-port", type=int, default=56061)
+    p.add_argument("--database-prefix", default=None)
+    p.set_defaults(func=run_customer_db_replica_cluster)
 
     args = parser.parse_args()
     args.func(args)

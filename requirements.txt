@@ -1,21 +1,17 @@
-# Core web & API
 fastapi>=0.110
 uvicorn[standard]>=0.24
-
-# gRPC
 grpcio>=1.76.0
 grpcio-tools>=1.76.0
-
-# SOAP client/server
+python-dotenv>=1.0.1
+requests>=2.32.3
 spyne>=2.14.0
 zeep>=4.2.1
 lxml>=4.9.4
+pydantic>=1.10
+six>=1.16.0
 
-# Database
+# Optional PostgreSQL compatibility for older code paths.
 psycopg2-binary>=2.9.11
 
-# Raft replication
+# Product DB Raft replication.
 pysyncobj>=0.3.15
-
-# Validation (pulled by FastAPI, explicit for clarity)
-pydantic>=1.10

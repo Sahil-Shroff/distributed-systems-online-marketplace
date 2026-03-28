@@ -3,3 +3,7 @@ __pycache__/
 *.pyo
 *.pyd
 .env
+runtime/
+database/**/*.sqlite
+database/product-database*
+product-database*

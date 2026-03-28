@@ -19,7 +19,7 @@ except Exception:
     SimpleConnectionPool = None
 
 
-SQLITE_JSON_COLUMNS = {"keywords", "item_feedback", "seller_feedback"}
+SQLITE_JSON_COLUMNS = {"keywords", "item_feedback"}
 SQLITE_BOOL_COLUMNS = {"condition_is_new", "is_saved"}
 
 
@@ -33,14 +33,17 @@ class Database_Connection:
         password: str | None = None,
         backend: str | None = None,
         sqlite_path: str | None = None,
+        db_path: str | None = None,
+        init_schema: str | None = None,
     ):
         self.db_name = db_name
-        self.backend = (backend or os.getenv("DB_BACKEND", "postgres")).lower()
+        self.backend = (backend or os.getenv("DB_BACKEND", "sqlite")).lower()
         self.host = host or os.getenv("PGHOST", "localhost")
         self.port = int(port or os.getenv("PGPORT", "5434"))
         self.user = user or os.getenv("PGUSER", "postgres")
         self.password = password or os.getenv("PGPASSWORD")
-        self.sqlite_path = sqlite_path
+        self.sqlite_path = sqlite_path or db_path
+        self.init_schema = init_schema
         self.DB_POOL = None
         self._sqlite_conn = None
         self._connect()
@@ -72,20 +75,30 @@ class Database_Connection:
             raise RuntimeError("sqlite_path or db_name is required for SQLite backend")
         path = Path(raw_path)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            repo_root = Path(__file__).resolve().parents[2]
+            if str(path).endswith(".sqlite") or str(path).endswith(".db"):
+                path = repo_root / "database" / path
+            else:
+                path = Path.cwd() / path
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
 
     def _connect_sqlite(self):
         path = self._resolve_sqlite_path()
+        self.sqlite_path = str(path)
         self._sqlite_conn = sqlite3.connect(str(path), check_same_thread=False)
         self._sqlite_conn.row_factory = sqlite3.Row
         self._sqlite_conn.execute("PRAGMA journal_mode=WAL")
         self._sqlite_conn.execute("PRAGMA synchronous=NORMAL")
         self._sqlite_conn.execute("PRAGMA foreign_keys=ON")
+        if self.init_schema:
+            self._sqlite_conn.executescript(self.init_schema)
         self._ensure_sqlite_schema()
 
     def _ensure_sqlite_schema(self):
+        if self.init_schema:
+            self._sqlite_conn.commit()
+            return
         if self.db_name and "product" in self.db_name:
             self._sqlite_conn.executescript(
                 """
@@ -173,6 +186,11 @@ class Database_Connection:
                 return cur.fetchall() if fetch else None
         finally:
             self.DB_POOL.putconn(conn)
+
+    def connect_sqlite(self):
+        if self.backend != "sqlite":
+            raise RuntimeError("connect_sqlite is only available for SQLite backends")
+        return sqlite3.connect(self.sqlite_path, timeout=30, check_same_thread=False)
 
     def close(self):
         if self.backend == "sqlite":

@@ -1,114 +1,140 @@
+from __future__ import annotations
+
 import requests
 
 
 class BuyerRestClient:
-    """
-    Lightweight REST client for the buyer FastAPI server.
-    """
-
     def __init__(self, host: str = "127.0.0.1", port: int = 8001):
-        self.base = f"http://{host}:{port}"
-        self.session_id = None
-        self.buyer_id = None
+        self.bases = self._build_bases(host, port)
+        self._active_base_idx = 0
+        self.session_id: str | None = None
+        self.buyer_id: int | None = None
 
-    # --- Auth ---
     def create_account(self, username: str, password: str) -> int:
-        resp = requests.post(f"{self.base}/buyer/account", json={"username": username, "password": password})
-        resp.raise_for_status()
-        self.buyer_id = resp.json()["buyer_id"]
+        resp = self._request_with_failover(
+            "POST",
+            "/buyer/account",
+            json={"username": username, "password": password},
+            include_auth=False,
+        )
+        payload = resp.json()
+        self.buyer_id = payload["buyer_id"]
         return self.buyer_id
 
     def login(self, username: str, password: str) -> int:
-        resp = requests.post(f"{self.base}/buyer/login", json={"username": username, "password": password})
-        resp.raise_for_status()
-        data = resp.json()
-        self.session_id = data["session_id"]
-        self.buyer_id = data["buyer_id"]
+        resp = self._request_with_failover(
+            "POST",
+            "/buyer/login",
+            json={"username": username, "password": password},
+            include_auth=False,
+        )
+        payload = resp.json()
+        self.session_id = payload["session_id"]
+        self.buyer_id = payload["buyer_id"]
         return self.buyer_id
 
-    def logout(self):
-        self._auth_post(f"{self.base}/buyer/logout")
+    def logout(self) -> None:
+        self._request_with_failover("POST", "/buyer/logout")
         self.session_id = None
 
-    # --- Items ---
-    def search_items(self, category: int = 0, keywords=None):
-        kw = ",".join(keywords) if keywords else ""
-        resp = requests.get(f"{self.base}/buyer/items", params={"category": category, "keywords": kw})
-        resp.raise_for_status()
+    def search_items(self, category: int = 0, keywords: list[str] | None = None) -> list[dict]:
+        params = {"category": int(category)}
+        if keywords:
+            params["keywords"] = ",".join(keywords)
+        resp = self._request_with_failover("GET", "/buyer/items", params=params, include_auth=False)
         return resp.json().get("items", [])
 
-    def get_item(self, item_id: int):
-        resp = requests.get(f"{self.base}/buyer/items/{item_id}")
-        resp.raise_for_status()
+    def get_item(self, item_id: int) -> dict:
+        resp = self._request_with_failover("GET", f"/buyer/items/{item_id}", include_auth=False)
         return resp.json()
 
-    # --- Cart ---
-    def add_to_cart(self, item_id: int, quantity: int):
-        self._auth_post(f"{self.base}/buyer/cart", json={"item_id": item_id, "quantity": quantity})
+    def add_to_cart(self, item_id: int, quantity: int) -> None:
+        self._request_with_failover(
+            "POST",
+            "/buyer/cart",
+            json={"item_id": int(item_id), "quantity": int(quantity)},
+        )
 
-    def remove_from_cart(self, item_id: int):
-        self._auth_delete(f"{self.base}/buyer/cart/{item_id}")
+    def remove_from_cart(self, item_id: int) -> None:
+        self._request_with_failover("DELETE", f"/buyer/cart/{int(item_id)}")
 
-    def display_cart(self):
-        resp = self._auth_get(f"{self.base}/buyer/cart")
+    def display_cart(self) -> list[dict]:
+        resp = self._request_with_failover("GET", "/buyer/cart")
         return resp.json().get("cart", [])
 
-    def save_cart(self):
-        self._auth_post(f"{self.base}/buyer/cart/save")
+    def save_cart(self) -> None:
+        self._request_with_failover("POST", "/buyer/cart/save")
 
-    def clear_cart(self):
-        self._auth_delete(f"{self.base}/buyer/cart/clear")
+    def clear_cart(self) -> None:
+        self._request_with_failover("DELETE", "/buyer/cart/clear")
 
-    # --- Feedback ---
-    def provide_feedback(self, item_id: int, is_positive: bool):
-        self._auth_post(f"{self.base}/buyer/feedback", json={"item_id": item_id, "is_positive": bool(is_positive)})
+    def provide_feedback(self, item_id: int, is_positive: bool) -> None:
+        self._request_with_failover(
+            "POST",
+            "/buyer/feedback",
+            json={"item_id": int(item_id), "is_positive": bool(is_positive)},
+        )
 
-    def get_seller_rating(self, seller_id: int):
-        resp = requests.get(f"{self.base}/seller/{seller_id}/rating", headers=self._headers())
-        resp.raise_for_status()
+    def get_seller_rating(self, seller_id: int) -> dict:
+        resp = self._request_with_failover("GET", f"/seller/{seller_id}/rating", include_auth=False)
         return resp.json()
 
-    def get_purchases(self):
-        resp = self._auth_get(f"{self.base}/buyer/purchases")
+    def get_purchase_history(self) -> list[dict]:
+        resp = self._request_with_failover("GET", "/buyer/purchases")
         return resp.json().get("purchases", [])
 
-    # --- Purchase ---
-    def purchase(self, name: str, card_number: str, expiration_date: str, security_code: str):
-        resp = self._auth_post(
-            f"{self.base}/buyer/purchase",
+    def make_purchase(self, username: str, credit_card_number: str, expiration_date: str, security_code: str) -> dict:
+        resp = self._request_with_failover(
+            "POST",
+            "/buyer/purchase",
             json={
-                "name": name,
-                "card_number": card_number,
+                "name": username,
+                "card_number": credit_card_number,
                 "expiration_date": expiration_date,
                 "security_code": security_code,
             },
         )
         return resp.json()
 
-    # --- Helpers ---
-    def _headers(self):
-        h = {}
+    def _build_bases(self, host: str, port: int) -> list[str]:
+        targets = [part.strip() for part in host.split(",") if part.strip()]
+        if not targets:
+            targets = [host]
+        bases = []
+        for target in targets:
+            if target.startswith("http://") or target.startswith("https://"):
+                bases.append(target.rstrip("/"))
+            elif ":" in target:
+                bases.append(f"http://{target}")
+            else:
+                bases.append(f"http://{target}:{port}")
+        return bases
+
+    def _headers(self) -> dict[str, str]:
+        headers: dict[str, str] = {}
         if self.session_id:
-            h["x-session-id"] = str(self.session_id)
-        return h
+            headers["x-session-id"] = str(self.session_id)
+        return headers
 
-    def _auth_post(self, url, **kwargs):
-        headers = kwargs.pop("headers", {})
-        headers.update(self._headers())
-        resp = requests.post(url, headers=headers, **kwargs)
-        resp.raise_for_status()
-        return resp
-
-    def _auth_get(self, url, **kwargs):
-        headers = kwargs.pop("headers", {})
-        headers.update(self._headers())
-        resp = requests.get(url, headers=headers, **kwargs)
-        resp.raise_for_status()
-        return resp
-
-    def _auth_delete(self, url, **kwargs):
-        headers = kwargs.pop("headers", {})
-        headers.update(self._headers())
-        resp = requests.delete(url, headers=headers, **kwargs)
-        resp.raise_for_status()
-        return resp
+    def _request_with_failover(self, method: str, path: str, *, include_auth: bool = True, **kwargs):
+        extra_headers = dict(kwargs.pop("headers", {}))
+        last_error = None
+        for offset in range(len(self.bases)):
+            idx = (self._active_base_idx + offset) % len(self.bases)
+            headers = dict(extra_headers)
+            if include_auth:
+                headers.update(self._headers())
+            try:
+                resp = requests.request(
+                    method,
+                    f"{self.bases[idx]}{path}",
+                    headers=headers,
+                    timeout=30,
+                    **kwargs,
+                )
+                resp.raise_for_status()
+                self._active_base_idx = idx
+                return resp
+            except requests.RequestException as exc:
+                last_error = exc
+        raise last_error

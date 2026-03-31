@@ -144,6 +144,11 @@ class DatabaseServiceStub(object):
                 request_serializer=database__pb2.GetSellerRatingRequest.SerializeToString,
                 response_deserializer=database__pb2.SellerRatingResponse.FromString,
                 _registered_method=True)
+        self.RecordSellerFeedback = channel.unary_unary(
+                '/marketplace.DatabaseService/RecordSellerFeedback',
+                request_serializer=database__pb2.RecordSellerFeedbackRequest.SerializeToString,
+                response_deserializer=database__pb2.Empty.FromString,
+                _registered_method=True)
         self.GetPurchaseHistory = channel.unary_unary(
                 '/marketplace.DatabaseService/GetPurchaseHistory',
                 request_serializer=database__pb2.GetPurchaseHistoryRequest.SerializeToString,
@@ -152,6 +157,11 @@ class DatabaseServiceStub(object):
         self.CreatePurchase = channel.unary_unary(
                 '/marketplace.DatabaseService/CreatePurchase',
                 request_serializer=database__pb2.CreatePurchaseRequest.SerializeToString,
+                response_deserializer=database__pb2.Empty.FromString,
+                _registered_method=True)
+        self.RecordPurchaseStats = channel.unary_unary(
+                '/marketplace.DatabaseService/RecordPurchaseStats',
+                request_serializer=database__pb2.RecordPurchaseStatsRequest.SerializeToString,
                 response_deserializer=database__pb2.Empty.FromString,
                 _registered_method=True)
 
@@ -295,6 +305,12 @@ class DatabaseServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def RecordSellerFeedback(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def GetPurchaseHistory(self, request, context):
         """--- Purchases ---
         """
@@ -303,6 +319,12 @@ class DatabaseServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def CreatePurchase(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RecordPurchaseStats(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -421,6 +443,11 @@ def add_DatabaseServiceServicer_to_server(servicer, server):
                     request_deserializer=database__pb2.GetSellerRatingRequest.FromString,
                     response_serializer=database__pb2.SellerRatingResponse.SerializeToString,
             ),
+            'RecordSellerFeedback': grpc.unary_unary_rpc_method_handler(
+                    servicer.RecordSellerFeedback,
+                    request_deserializer=database__pb2.RecordSellerFeedbackRequest.FromString,
+                    response_serializer=database__pb2.Empty.SerializeToString,
+            ),
             'GetPurchaseHistory': grpc.unary_unary_rpc_method_handler(
                     servicer.GetPurchaseHistory,
                     request_deserializer=database__pb2.GetPurchaseHistoryRequest.FromString,
@@ -429,6 +456,11 @@ def add_DatabaseServiceServicer_to_server(servicer, server):
             'CreatePurchase': grpc.unary_unary_rpc_method_handler(
                     servicer.CreatePurchase,
                     request_deserializer=database__pb2.CreatePurchaseRequest.FromString,
+                    response_serializer=database__pb2.Empty.SerializeToString,
+            ),
+            'RecordPurchaseStats': grpc.unary_unary_rpc_method_handler(
+                    servicer.RecordPurchaseStats,
+                    request_deserializer=database__pb2.RecordPurchaseStatsRequest.FromString,
                     response_serializer=database__pb2.Empty.SerializeToString,
             ),
     }
@@ -1037,6 +1069,33 @@ class DatabaseService(object):
             _registered_method=True)
 
     @staticmethod
+    def RecordSellerFeedback(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/marketplace.DatabaseService/RecordSellerFeedback',
+            database__pb2.RecordSellerFeedbackRequest.SerializeToString,
+            database__pb2.Empty.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def GetPurchaseHistory(request,
             target,
             options=(),
@@ -1079,6 +1138,33 @@ class DatabaseService(object):
             target,
             '/marketplace.DatabaseService/CreatePurchase',
             database__pb2.CreatePurchaseRequest.SerializeToString,
+            database__pb2.Empty.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RecordPurchaseStats(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/marketplace.DatabaseService/RecordPurchaseStats',
+            database__pb2.RecordPurchaseStatsRequest.SerializeToString,
             database__pb2.Empty.FromString,
             options,
             channel_credentials,

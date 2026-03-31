@@ -1,0 +1,8 @@
+project_id             = "your-gcp-project-id"
+region                 = "us-central1"
+zone                   = "us-central1-a"
+service_machine_type   = "f1-micro"
+benchmark_machine_type = "g1-small"
+boot_disk_size_gb      = 10
+boot_disk_type         = "pd-standard"
+admin_source_ranges    = ["0.0.0.0/0"]

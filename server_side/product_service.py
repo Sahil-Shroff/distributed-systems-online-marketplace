@@ -66,23 +66,21 @@ class ProductServiceServicer(database_pb2_grpc.DatabaseServiceServicer):
 
         dump_file = dump_dir / f"product-{raft_self.replace(':', '_')}.bin"
         self.store = ProductRaftStore(raft_self, raft_partners, str(dump_file), apply_listener=self._apply_product_event)
-        disable_customer_db = os.getenv("PRODUCT_SERVICE_DISABLE_CUSTOMER_DB", "").lower() in {"1", "true", "yes"}
         disable_product_db = os.getenv("PRODUCT_SERVICE_DISABLE_PRODUCT_DB", "").lower() in {"1", "true", "yes"}
         product_backend = os.getenv("PRODUCT_DB_BACKEND", os.getenv("DB_BACKEND", "postgres")).lower()
         product_sqlite_path = os.getenv(
             "PRODUCT_SQLITE_PATH",
             str(runtime_dir / "sqlite" / f"product-service-{grpc_port}.db"),
         )
-        if disable_customer_db:
-            self.customer_db = _NoopCustomerDB()
-        else:
-            self.customer_db = Database_Connection(
-                os.getenv("CUSTOMER_DB_NAME", "customer-database"),
-                host=os.getenv("CUSTOMER_PGHOST") or os.getenv("PGHOST", "localhost"),
-                port=int(os.getenv("CUSTOMER_PGPORT") or os.getenv("PGPORT", "5434")),
-                user=os.getenv("CUSTOMER_PGUSER") or os.getenv("PGUSER", "postgres"),
-                password=os.getenv("CUSTOMER_PGPASSWORD") or os.getenv("PGPASSWORD"),
-            )
+        customer_service_addrs = [
+            addr.strip()
+            for addr in os.getenv("CUSTOMER_SERVICE_ADDR", "").split(",")
+            if addr.strip()
+        ]
+        self.customer_stubs = [
+            database_pb2_grpc.DatabaseServiceStub(grpc.insecure_channel(addr))
+            for addr in customer_service_addrs
+        ]
         if disable_product_db:
             self.product_db = _NoopProductDB()
         else:
@@ -103,13 +101,29 @@ class ProductServiceServicer(database_pb2_grpc.DatabaseServiceServicer):
     def close(self):
         self._stop_event.set()
         try:
-            self.customer_db.close()
-        except Exception:
-            pass
-        try:
             self.product_db.close()
         except Exception:
             pass
+
+    def _customer_call(self, method_name: str, request, timeout: float = 5.0):
+        if not self.customer_stubs:
+            return None
+        last_error = None
+        for stub in self.customer_stubs:
+            try:
+                return getattr(stub, method_name)(request, timeout=timeout)
+            except grpc.RpcError as exc:
+                last_error = exc
+                if exc.code() in {
+                    grpc.StatusCode.UNAVAILABLE,
+                    grpc.StatusCode.DEADLINE_EXCEEDED,
+                    grpc.StatusCode.UNKNOWN,
+                }:
+                    continue
+                raise
+        if last_error is not None:
+            raise last_error
+        return None
 
     def _write_status_loop(self):
         while not self._stop_event.is_set():
@@ -460,12 +474,16 @@ class ProductServiceServicer(database_pb2_grpc.DatabaseServiceServicer):
 
     def ProvideFeedback(self, request, context):
         seller_id = self._sync_call(context, self.store.provide_feedback, request.item_id, request.is_positive)
-        idx = 1 if request.is_positive else 2
-        self.customer_db.execute(
-            f"UPDATE sellers SET seller_feedback[{idx}] = seller_feedback[{idx}] + 1 WHERE seller_id = %s",
-            (seller_id,),
-            fetch=False,
-        )
+        try:
+            self._customer_call(
+                "RecordSellerFeedback",
+                database_pb2.RecordSellerFeedbackRequest(
+                    seller_id=seller_id,
+                    is_positive=request.is_positive,
+                ),
+            )
+        except grpc.RpcError as exc:
+            context.abort(exc.code(), exc.details() or str(exc))
         return database_pb2.Empty()
 
     def GetSellerRating(self, request, context):
@@ -496,17 +514,17 @@ class ProductServiceServicer(database_pb2_grpc.DatabaseServiceServicer):
         )
         item = self.store.get_item(request.item_id)
         if item:
-            seller_id = item["seller_id"]
-            self.customer_db.execute(
-                "UPDATE buyers SET items_purchased = items_purchased + %s WHERE buyer_id = %s",
-                (request.quantity, request.buyer_id),
-                fetch=False,
-            )
-            self.customer_db.execute(
-                "UPDATE sellers SET items_sold = items_sold + %s WHERE seller_id = %s",
-                (request.quantity, seller_id),
-                fetch=False,
-            )
+            try:
+                self._customer_call(
+                    "RecordPurchaseStats",
+                    database_pb2.RecordPurchaseStatsRequest(
+                        buyer_id=request.buyer_id,
+                        seller_id=item["seller_id"],
+                        quantity=request.quantity,
+                    ),
+                )
+            except grpc.RpcError as exc:
+                context.abort(exc.code(), exc.details() or str(exc))
         return database_pb2.Empty()
 
 

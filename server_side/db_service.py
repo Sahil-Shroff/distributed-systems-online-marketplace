@@ -369,6 +369,17 @@ class DatabaseServiceServicer(database_pb2_grpc.DatabaseServiceServicer):
             return database_pb2.SellerRatingResponse(pos=0, neg=0)
         return database_pb2.SellerRatingResponse(pos=feedback[0], neg=feedback[1])
 
+    def RecordSellerFeedback(self, request, context):
+        operation = self.customer_service.build_update_seller_feedback(
+            seller_id=request.seller_id,
+            is_positive=request.is_positive,
+        )
+        try:
+            self._apply_customer_operation(operation)
+        except TimeoutError as e:
+            context.abort(grpc.StatusCode.DEADLINE_EXCEEDED, str(e))
+        return database_pb2.Empty()
+
     # --- Purchases ---
     def GetPurchaseHistory(self, request, context):
         rows = self.product_db.execute(
@@ -398,6 +409,18 @@ class DatabaseServiceServicer(database_pb2_grpc.DatabaseServiceServicer):
                 self._apply_customer_operation(operation)
             except TimeoutError as e:
                 context.abort(grpc.StatusCode.DEADLINE_EXCEEDED, str(e))
+        return database_pb2.Empty()
+
+    def RecordPurchaseStats(self, request, context):
+        operation = self.customer_service.build_complete_purchase(
+            buyer_id=request.buyer_id,
+            seller_id=request.seller_id,
+            quantity=request.quantity,
+        )
+        try:
+            self._apply_customer_operation(operation)
+        except TimeoutError as e:
+            context.abort(grpc.StatusCode.DEADLINE_EXCEEDED, str(e))
         return database_pb2.Empty()
 
     def _item_from_row(self, row):

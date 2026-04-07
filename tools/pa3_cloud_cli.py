@@ -16,6 +16,23 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 TERRAFORM_DIR = REPO_ROOT / "infra" / "terraform"
 RUNTIME_DIR = REPO_ROOT / "runtime" / "cloud_cli"
 JSON_MARKER = "__PA3_JSON__="
+ACTIVE_TERRAFORM_DIR = TERRAFORM_DIR
+
+DEPLOYMENT_CANDIDATES = [
+    {"region": "us-west2", "zones": ["us-west2-a", "us-west2-b", "us-west2-c"]},
+    {"region": "us-west1", "zones": ["us-west1-a", "us-west1-b", "us-west1-c"]},
+    {"region": "us-east1", "zones": ["us-east1-b", "us-east1-c", "us-east1-d"]},
+    {"region": "us-east4", "zones": ["us-east4-a", "us-east4-b", "us-east4-c"]},
+    {"region": "us-central1", "zones": ["us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"]},
+]
+
+MACHINE_TYPE_CANDIDATES = [
+    "e2-small",
+    "e2-medium",
+    "n1-standard-1",
+    "e2-micro",
+    "f1-micro",
+]
 
 
 class CommandError(RuntimeError):
@@ -57,9 +74,33 @@ def run_cmd(
 
 
 def terraform(args: list[str], *, capture: bool = False, check: bool = True) -> subprocess.CompletedProcess[str]:
-    tf_args = [resolve_executable("terraform"), f"-chdir={TERRAFORM_DIR}"]
+    tf_args = [resolve_executable("terraform"), f"-chdir={ACTIVE_TERRAFORM_DIR}"]
     tf_args.extend(args)
     return run_cmd(tf_args, capture=capture, check=check)
+
+
+def use_fresh_terraform_workdir() -> Path:
+    global ACTIVE_TERRAFORM_DIR
+    timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
+    fresh_dir = Path(tempfile.mkdtemp(prefix=f"pa3-terraform-{timestamp}-"))
+    fresh_dir.mkdir(parents=True, exist_ok=True)
+    for name in ["main.tf", "variables.tf", "outputs.tf", "versions.tf", ".terraform.lock.hcl"]:
+        src = TERRAFORM_DIR / name
+        if src.exists():
+            shutil.copy2(src, fresh_dir / name)
+    templates_src = TERRAFORM_DIR / "templates"
+    if templates_src.exists():
+        shutil.copytree(templates_src, fresh_dir / "templates", dirs_exist_ok=True)
+    main_tf = fresh_dir / "main.tf"
+    if main_tf.exists():
+        content = main_tf.read_text(encoding="utf-8")
+        content = content.replace(
+            'source_dir  = abspath("${path.module}/../..")',
+            f'source_dir  = "{REPO_ROOT.as_posix()}"',
+        )
+        main_tf.write_text(content, encoding="utf-8")
+    ACTIVE_TERRAFORM_DIR = fresh_dir
+    return fresh_dir
 
 
 def ensure_workspace(project_id: str) -> None:
@@ -192,20 +233,96 @@ def run_remote_python(instance: str, zone: str, project_id: str, script_name: st
 
 
 def deploy(args: argparse.Namespace) -> None:
+    try:
+        terraform(["init", "-upgrade"], capture=True)
+    except CommandError as exc:
+        message = str(exc).lower()
+        if "state file could not be read" in message or "locked a portion of the file" in message:
+            fresh_dir = use_fresh_terraform_workdir()
+            print(f"Using fresh Terraform workdir due to local state lock: {fresh_dir}")
+            terraform(["init", "-upgrade"], capture=True)
+        else:
+            raise
     ensure_workspace(args.project_id)
-    terraform(["init", "-upgrade"])
-    apply_args = [
-        "apply",
-        "-auto-approve",
-        f"-var=project_id={args.project_id}",
-        f"-var=service_machine_type={args.service_machine_type}",
-        f"-var=region={args.region}",
+
+    explicit_region = "--region" in os.sys.argv
+    explicit_zones = "--zones" in os.sys.argv
+    explicit_machine_type = "--service-machine-type" in os.sys.argv
+
+    region_zone_candidates: list[tuple[str, list[str]]] = []
+    seen_region_zone_keys: set[tuple[str, tuple[str, ...]]] = set()
+
+    preferred_region = args.region
+    preferred_zones = list(args.zones or [])
+    if preferred_region and preferred_zones:
+        key = (preferred_region, tuple(preferred_zones))
+        seen_region_zone_keys.add(key)
+        region_zone_candidates.append((preferred_region, preferred_zones))
+
+    if not explicit_region and not explicit_zones:
+        for candidate in DEPLOYMENT_CANDIDATES:
+            key = (candidate["region"], tuple(candidate["zones"]))
+            if key in seen_region_zone_keys:
+                continue
+            seen_region_zone_keys.add(key)
+            region_zone_candidates.append((candidate["region"], list(candidate["zones"])))
+
+    machine_types: list[str] = []
+    seen_machine_types: set[str] = set()
+    if args.service_machine_type:
+        machine_types.append(args.service_machine_type)
+        seen_machine_types.add(args.service_machine_type)
+    if not explicit_machine_type:
+        for machine_type in MACHINE_TYPE_CANDIDATES:
+            if machine_type in seen_machine_types:
+                continue
+            machine_types.append(machine_type)
+            seen_machine_types.add(machine_type)
+
+    attempts = [
+        (region, zones, machine_type)
+        for region, zones in region_zone_candidates
+        for machine_type in machine_types
     ]
-    if args.zones:
-        apply_args.append(f"-var=zones={json.dumps(args.zones)}")
-    terraform(apply_args)
-    print("Terraform apply completed.")
-    show_inventory(args)
+
+    last_error: CommandError | None = None
+    for index, (region, zones, machine_type) in enumerate(attempts, start=1):
+        print(
+            f"Deploy attempt {index}/{len(attempts)}: "
+            f"region={region} zones={zones} machine_type={machine_type}"
+        )
+        apply_args = [
+            "apply",
+            "-auto-approve",
+            "-parallelism=2",
+            f"-var=project_id={args.project_id}",
+            f"-var=service_machine_type={machine_type}",
+            f"-var=region={region}",
+            f"-var=zones={json.dumps(zones)}",
+        ]
+        try:
+            terraform(apply_args, capture=True)
+            args.region = region
+            args.zones = zones
+            args.service_machine_type = machine_type
+            print("Terraform apply completed.")
+            show_inventory(args)
+            return
+        except CommandError as exc:
+            last_error = exc
+            print(f"Deploy attempt failed: {exc}")
+            destroy_args = [
+                "destroy",
+                "-auto-approve",
+                "-parallelism=2",
+                f"-var=project_id={args.project_id}",
+                f"-var=service_machine_type={machine_type}",
+                f"-var=region={region}",
+                f"-var=zones={json.dumps(zones)}",
+            ]
+            terraform(destroy_args, capture=True, check=False)
+
+    raise CommandError(f"All deployment attempts failed.\nLast error:\n{last_error}")
 
 
 def show_inventory(args: argparse.Namespace) -> None:
@@ -449,9 +566,9 @@ def run_all(args: argparse.Namespace) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="PA3 cloud deployment and demo CLI")
     parser.add_argument("--project-id", default="prismatic-night-491821-g0")
-    parser.add_argument("--region", default="us-central1")
-    parser.add_argument("--service-machine-type", default="f1-micro")
-    parser.add_argument("--zones", nargs="*", default=["us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"])
+    parser.add_argument("--region", default="us-west2")
+    parser.add_argument("--service-machine-type", default="e2-micro")
+    parser.add_argument("--zones", nargs="*", default=["us-west2-a", "us-west2-b", "us-west2-c"])
 
     sub = parser.add_subparsers(dest="cmd", required=True)
 

@@ -299,11 +299,7 @@ def make_purchase(data: PurchaseModel, x_session_id: str = Header(None)):
 
     # 4. Finalize Purchase
     for item, qty in items_to_buy:
-        # Deduct quantity
-        _grpc_call(product_stubs, "UpdateItemQuantity", database_pb2.UpdateItemQuantityRequest(
-            item_id=item.item_id, seller_id=item.seller_id, quantity_delta=qty
-        ))
-        # Create purchase record
+        # CreatePurchase applies the stock decrement inside the replicated product store.
         _grpc_call(product_stubs, "CreatePurchase", database_pb2.CreatePurchaseRequest(
             buyer_id=user_id, item_id=item.item_id, quantity=qty
         ))

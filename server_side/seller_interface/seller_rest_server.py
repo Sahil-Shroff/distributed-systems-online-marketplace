@@ -62,6 +62,33 @@ def _grpc_call(stubs, method_name: str, request, timeout: float = 5.0):
     raise RuntimeError(f"No stubs configured for {method_name}")
 
 
+def _grpc_read_call(stubs, method_name: str, request, timeout: float = 5.0, *, empty_attr: str | None = None):
+    last_error = None
+    last_response = None
+    for stub in stubs:
+        try:
+            response = getattr(stub, method_name)(request, timeout=timeout)
+            last_response = response
+            if empty_attr is not None and not getattr(response, empty_attr):
+                continue
+            return response
+        except grpc.RpcError as exc:
+            last_error = exc
+            if exc.code() in {
+                grpc.StatusCode.UNAVAILABLE,
+                grpc.StatusCode.DEADLINE_EXCEEDED,
+                grpc.StatusCode.UNKNOWN,
+                grpc.StatusCode.NOT_FOUND,
+            }:
+                continue
+            raise
+    if last_response is not None:
+        return last_response
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError(f"No stubs configured for {method_name}")
+
+
 def verify_session(session_id: str):
     if not session_id:
         raise HTTPException(status_code=401, detail="Session ID required")
@@ -179,7 +206,12 @@ def update_quantity(item_id: int, data: UpdateQuantityModel, x_session_id: str =
 @app.get("/seller/items")
 def display_items(x_session_id: str = Header(None)):
     user_id, _ = verify_session(x_session_id)
-    resp = _grpc_call(product_stubs, "GetItemsBySeller", database_pb2.GetItemsBySellerRequest(seller_id=user_id))
+    resp = _grpc_read_call(
+        product_stubs,
+        "GetItemsBySeller",
+        database_pb2.GetItemsBySellerRequest(seller_id=user_id),
+        empty_attr="items",
+    )
     return {
         "items": [
             {
@@ -200,7 +232,7 @@ def display_items(x_session_id: str = Header(None)):
 def get_item(item_id: int, x_session_id: str = Header(None)):
     user_id, _ = verify_session(x_session_id)
     try:
-        item = _grpc_call(product_stubs, "GetItem", database_pb2.GetItemRequest(item_id=item_id))
+        item = _grpc_read_call(product_stubs, "GetItem", database_pb2.GetItemRequest(item_id=item_id))
     except grpc.RpcError as e:
         if e.code() == grpc.StatusCode.NOT_FOUND:
             raise HTTPException(status_code=404, detail="Item not found")

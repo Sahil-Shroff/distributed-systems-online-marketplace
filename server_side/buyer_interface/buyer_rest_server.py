@@ -75,6 +75,33 @@ def _grpc_call(stubs, method_name: str, request, timeout: float = 5.0):
         raise last_error
     raise RuntimeError(f"No stubs configured for {method_name}")
 
+
+def _grpc_read_call(stubs, method_name: str, request, timeout: float = 5.0, *, empty_attr: str | None = None):
+    last_error = None
+    last_response = None
+    for stub in stubs:
+        try:
+            response = getattr(stub, method_name)(request, timeout=timeout)
+            last_response = response
+            if empty_attr is not None and not getattr(response, empty_attr):
+                continue
+            return response
+        except grpc.RpcError as exc:
+            last_error = exc
+            if exc.code() in {
+                grpc.StatusCode.UNAVAILABLE,
+                grpc.StatusCode.DEADLINE_EXCEEDED,
+                grpc.StatusCode.UNKNOWN,
+                grpc.StatusCode.NOT_FOUND,
+            }:
+                continue
+            raise
+    if last_response is not None:
+        return last_response
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError(f"No stubs configured for {method_name}")
+
 # --- Endpoints ---
 
 @app.post("/buyer/account")
@@ -112,9 +139,9 @@ def logout(x_session_id: str = Header(None)):
 @app.get("/buyer/items")
 def search_items(category: int = 0, keywords: str = ""):
     kw_list = [k.strip() for k in keywords.split(",") if k.strip()]
-    resp = _grpc_call(product_stubs, "SearchItems", database_pb2.SearchItemsRequest(
+    resp = _grpc_read_call(product_stubs, "SearchItems", database_pb2.SearchItemsRequest(
         category=category, keywords=kw_list
-    ))
+    ), empty_attr="items")
     items = []
     for item in resp.items:
         items.append({
@@ -132,7 +159,7 @@ def search_items(category: int = 0, keywords: str = ""):
 @app.get("/buyer/items/{item_id}")
 def get_item(item_id: int):
     try:
-        item = _grpc_call(product_stubs, "GetItem", database_pb2.GetItemRequest(item_id=item_id))
+        item = _grpc_read_call(product_stubs, "GetItem", database_pb2.GetItemRequest(item_id=item_id))
         return {
             "item_id": item.item_id,
             "item_name": item.item_name,
@@ -180,14 +207,6 @@ def save_cart(x_session_id: str = Header(None)):
     ))
     return {"status": "success"}
 
-@app.delete("/buyer/cart/{item_id}")
-def remove_from_cart(item_id: int, x_session_id: str = Header(None)):
-    user_id, _ = verify_session(x_session_id)
-    _grpc_call(product_stubs, "RemoveFromCart", database_pb2.RemoveFromCartRequest(
-        buyer_id=user_id, session_id=x_session_id, item_id=item_id
-    ))
-    return {"status": "success"}
-
 @app.delete("/buyer/cart/clear")
 def clear_cart(x_session_id: str = Header(None)):
     user_id, _ = verify_session(x_session_id)
@@ -195,6 +214,14 @@ def clear_cart(x_session_id: str = Header(None)):
         buyer_id=user_id, session_id=x_session_id
     ))
     _grpc_call(product_stubs, "ClearSavedCart", database_pb2.ClearSavedCartRequest(buyer_id=user_id))
+    return {"status": "success"}
+
+@app.delete("/buyer/cart/{item_id}")
+def remove_from_cart(item_id: int, x_session_id: str = Header(None)):
+    user_id, _ = verify_session(x_session_id)
+    _grpc_call(product_stubs, "RemoveFromCart", database_pb2.RemoveFromCartRequest(
+        buyer_id=user_id, session_id=x_session_id, item_id=item_id
+    ))
     return {"status": "success"}
 
 @app.post("/buyer/feedback")
@@ -258,7 +285,7 @@ def make_purchase(data: PurchaseModel, x_session_id: str = Header(None)):
         soap_client = SoapClient(FINANCIAL_SERVICE_WSDL)
         success = soap_client.service.AuthorizePayment(
             username=data.name,
-            card_number=data.card_number,
+            credit_card_number=data.card_number,
             expiration_date=data.expiration_date,
             security_code=data.security_code
         )

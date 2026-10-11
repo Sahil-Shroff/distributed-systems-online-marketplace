@@ -3,3 +3,12 @@ __pycache__/
 *.pyo
 *.pyd
 .env
+runtime/
+database/**/*.sqlite
+database/product-database*
+product-database*
+infra/terraform/.terraform/
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.*
+infra/terraform/.terraform.lock.hcl
+infra/terraform/marketplace-source.zip

@@ -1,140 +1,82 @@
-import sys
-from pathlib import Path
+from __future__ import annotations
 
-# ensure repo root on path for client_side imports
-REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+import argparse
 
-from client_side.common.tcp_client import TCPClient
-from client_side.seller_interface.seller_client import SellerClient
-from client_side.common.protocol import ClientProtocolError
+from client_side.seller_interface.seller_rest_client import SellerRestClient
 
 
-HELP_TEXT = """
-Available commands:
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Seller REST CLI")
+    parser.add_argument("host")
+    parser.add_argument("port", type=int)
+    args = parser.parse_args()
 
-Account / Session:
-  create_account <username> <password>
-  login <username> <password>
-  logout
-
-Item Management:
-  register_item <name> <category> <condition> <price> <quantity> <kw1> [kw2 kw3 kw4 kw5]
-  change_price <item_id> <new_price>
-  update_units <item_id> <quantity_to_remove>
-  display_items
-
-Utility:
-  help
-  exit
-"""
-
-
-def main():
-    if len(sys.argv) != 3:
-        print("Usage: python seller_cli.py <server_host> <server_port>")
-        sys.exit(1)
-
-    host = sys.argv[1]
-    port = int(sys.argv[2])
-
-    tcp = TCPClient(host, port)
-    client = SellerClient(tcp)
-
-    print("Seller CLI started. Type 'help' for commands.")
+    client = SellerRestClient(args.host, args.port)
+    print("Seller REST CLI started. Type 'help' for commands.")
 
     while True:
         try:
-            raw = input("seller> ").strip()
-            if not raw:
-                continue
+            line = input("seller> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
 
-            parts = raw.split()
-            print("parts", parts)
-            cmd = parts[0].lower()
-            args = parts[1:]
+        if not line:
+            continue
 
-            # ---------- Utility ----------
-            if cmd == "help":
-                print(HELP_TEXT)
+        parts = line.split()
+        cmd = parts[0].lower()
+        rest = parts[1:]
 
-            elif cmd == "exit":
-                client.logout() if client.session_id else None
-                tcp.close()
-                print("Goodbye.")
+        try:
+            if cmd in {"quit", "exit"}:
                 break
-
-            # ---------- Account ----------
-            elif cmd == "create_account":
-                username, password = args
-                seller_id = client.create_account(username, password)
+            if cmd == "help":
+                print("create_account <username> <password>")
+                print("login <username> <password>")
+                print("logout")
+                print("register_item <name> <category> <condition> <price> <quantity> [keywords...]")
+                print("change_price <item_id> <new_price>")
+                print("update_qty <item_id> <delta>")
+                print("list_items")
+                print("get_item <item_id>")
+                print("rating")
+                print("quit")
+            elif cmd == "create_account" and len(rest) == 2:
+                seller_id = client.create_account(rest[0], rest[1])
                 print(f"Account created. Seller ID: {seller_id}")
-
-            elif cmd == "login":
-                username, password = args
-                seller_id = client.login(username, password)
-                print(f"Logged in. Seller ID: {seller_id}")
-
-            elif cmd == "logout":
+            elif cmd == "login" and len(rest) == 2:
+                seller_id = client.login(rest[0], rest[1])
+                print(f"Logged in. Seller ID: {seller_id} Session: {client.session_id}")
+            elif cmd == "logout" and len(rest) == 0:
                 client.logout()
                 print("Logged out.")
-
-            # ---------- Item Management ----------
-            elif cmd == "register_item":
-                if len(args) < 5:
-                    print("Usage: register_item <name> <category> <condition> <price> <quantity> [kw1 kw2 ...]")
-                    continue
-                name = args[0]
-                category = int(args[1])
-                condition = args[2]
-                price = float(args[3])
-                quantity = int(args[4])
-                keywords = args[5:]  # optional
-
-                item_id = client.register_item_for_sale(
-                    item_name=name,
-                    category=category,
-                    keywords=keywords,
-                    condition=condition,
-                    price=price,
-                    quantity=quantity
-                )
-                print(f"Item registered. Item ID: {item_id}")
-
-            elif cmd == "change_price":
-                item_id = args[0]
-                new_price = float(args[1])
-                client.change_item_price(item_id, new_price)
+            elif cmd == "register_item" and len(rest) >= 5:
+                name = rest[0]
+                category = int(rest[1])
+                condition = rest[2]
+                price = float(rest[3])
+                qty = int(rest[4])
+                keywords = rest[5:]
+                item_id = client.register_item_for_sale(name, category, keywords, condition, price, qty)
+                print(f"Item registered. ID: {item_id}")
+            elif cmd == "change_price" and len(rest) == 2:
+                client.change_item_price(int(rest[0]), float(rest[1]))
                 print("Price updated.")
-
-            elif cmd == "update_units":
-                item_id = args[0]
-                delta = int(args[1])
-                client.update_units_for_sale(item_id, delta)
-                print("Units updated.")
-
-            elif cmd == "display_items":
-                items = client.display_items_for_sale()
-                if not items:
-                    print("No items currently for sale.")
-                else:
-                    for it in items:
-                        print(it)
-
+            elif cmd == "update_qty" and len(rest) == 2:
+                new_qty = client.update_units_for_sale(int(rest[0]), int(rest[1]))
+                print(f"Quantity updated. New quantity: {new_qty}")
+            elif cmd == "list_items" and len(rest) == 0:
+                for item in client.display_items_for_sale():
+                    print(item)
+            elif cmd == "get_item" and len(rest) == 1:
+                print(client.get_item(int(rest[0])))
+            elif cmd == "rating" and len(rest) == 0:
+                print(client.get_rating())
             else:
-                print("Unknown command. Type 'help'.")
-
-        except ClientProtocolError as e:
-            print(f"Error {e}")
-
-        except (ValueError, IndexError):
-            print("Invalid command or arguments. Type 'help'.")
-
-        except KeyboardInterrupt:
-            print("\nExiting.")
-            tcp.close()
-            break
+                print("Invalid command or arguments. Type 'help'.")
+        except Exception as exc:
+            print(f"Error: {exc}")
 
 
 if __name__ == "__main__":

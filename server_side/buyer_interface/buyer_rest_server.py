@@ -16,9 +16,11 @@ from zeep import Client as SoapClient
 app = FastAPI(title="Marketplace Buyer API")
 
 # gRPC Setup
-DB_SERVICE_ADDR = os.getenv("DB_SERVICE_ADDR", "localhost:50051")
-channel = grpc.insecure_channel(DB_SERVICE_ADDR)
-db_stub = database_pb2_grpc.DatabaseServiceStub(channel)
+DEFAULT_DB_ADDR = os.getenv("DB_SERVICE_ADDR", "localhost:50051")
+CUSTOMER_SERVICE_ADDRS = [addr.strip() for addr in os.getenv("CUSTOMER_SERVICE_ADDR", DEFAULT_DB_ADDR).split(",") if addr.strip()]
+PRODUCT_SERVICE_ADDRS = [addr.strip() for addr in os.getenv("PRODUCT_SERVICE_ADDR", DEFAULT_DB_ADDR).split(",") if addr.strip()]
+customer_stubs = [database_pb2_grpc.DatabaseServiceStub(grpc.insecure_channel(addr)) for addr in CUSTOMER_SERVICE_ADDRS]
+product_stubs = [database_pb2_grpc.DatabaseServiceStub(grpc.insecure_channel(addr)) for addr in PRODUCT_SERVICE_ADDRS]
 
 # --- Models ---
 class CreateAccountModel(BaseModel):
@@ -48,19 +50,64 @@ def verify_session(session_id: str):
     if not session_id:
         raise HTTPException(status_code=401, detail="Session ID required")
     try:
-        resp = db_stub.VerifySession(database_pb2.VerifySessionRequest(session_id=session_id))
+        resp = _grpc_call(customer_stubs, "VerifySession", database_pb2.VerifySessionRequest(session_id=session_id))
         return resp.user_id, resp.role
     except grpc.RpcError as e:
         if e.code() == grpc.StatusCode.UNAUTHENTICATED:
             raise HTTPException(status_code=401, detail="Invalid or expired session")
         raise HTTPException(status_code=500, detail=str(e))
 
+def _grpc_call(stubs, method_name: str, request, timeout: float = 5.0):
+    last_error = None
+    for stub in stubs:
+        try:
+            return getattr(stub, method_name)(request, timeout=timeout)
+        except grpc.RpcError as exc:
+            last_error = exc
+            if exc.code() in {
+                grpc.StatusCode.UNAVAILABLE,
+                grpc.StatusCode.DEADLINE_EXCEEDED,
+                grpc.StatusCode.UNKNOWN,
+            }:
+                continue
+            raise
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError(f"No stubs configured for {method_name}")
+
+
+def _grpc_read_call(stubs, method_name: str, request, timeout: float = 5.0, *, empty_attr: str | None = None):
+    last_error = None
+    last_response = None
+    for stub in stubs:
+        try:
+            response = getattr(stub, method_name)(request, timeout=timeout)
+            last_response = response
+            if empty_attr is not None and not getattr(response, empty_attr):
+                continue
+            return response
+        except grpc.RpcError as exc:
+            last_error = exc
+            if exc.code() in {
+                grpc.StatusCode.UNAVAILABLE,
+                grpc.StatusCode.DEADLINE_EXCEEDED,
+                grpc.StatusCode.UNKNOWN,
+                grpc.StatusCode.NOT_FOUND,
+            }:
+                continue
+            raise
+    if last_response is not None:
+        return last_response
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError(f"No stubs configured for {method_name}")
+
 # --- Endpoints ---
 
 @app.post("/buyer/account")
 def create_account(data: CreateAccountModel):
     try:
-        resp = db_stub.CreateAccount(database_pb2.CreateAccountRequest(
+        resp = _grpc_call(customer_stubs, "CreateAccount", database_pb2.CreateAccountRequest(
             role="buyer", username=data.username, password=data.password
         ))
         return {"buyer_id": resp.user_id}
@@ -70,7 +117,7 @@ def create_account(data: CreateAccountModel):
 @app.post("/buyer/login")
 def login(data: LoginModel):
     try:
-        resp = db_stub.AuthenticateUser(database_pb2.AuthenticateRequest(
+        resp = _grpc_call(customer_stubs, "AuthenticateUser", database_pb2.AuthenticateRequest(
             role="buyer", username=data.username, password=data.password
         ))
         return {"session_id": resp.session_id, "buyer_id": resp.user_id}
@@ -81,10 +128,10 @@ def login(data: LoginModel):
 def logout(x_session_id: str = Header(None)):
     user_id, role = verify_session(x_session_id)
     # Clear active cart on logout if not saved (PA1 requirement)
-    db_stub.DeleteUnsavedCart(database_pb2.DeleteUnsavedCartRequest(
+    _grpc_call(product_stubs, "DeleteUnsavedCart", database_pb2.DeleteUnsavedCartRequest(
         buyer_id=user_id, session_id=x_session_id
     ))
-    db_stub.DeleteSessions(database_pb2.DeleteSessionsRequest(
+    _grpc_call(customer_stubs, "DeleteSessions", database_pb2.DeleteSessionsRequest(
         session_id=x_session_id, user_id=user_id, role=role, scope="single"
     ))
     return {"status": "success"}
@@ -92,9 +139,9 @@ def logout(x_session_id: str = Header(None)):
 @app.get("/buyer/items")
 def search_items(category: int = 0, keywords: str = ""):
     kw_list = [k.strip() for k in keywords.split(",") if k.strip()]
-    resp = db_stub.SearchItems(database_pb2.SearchItemsRequest(
+    resp = _grpc_read_call(product_stubs, "SearchItems", database_pb2.SearchItemsRequest(
         category=category, keywords=kw_list
-    ))
+    ), empty_attr="items")
     items = []
     for item in resp.items:
         items.append({
@@ -112,7 +159,7 @@ def search_items(category: int = 0, keywords: str = ""):
 @app.get("/buyer/items/{item_id}")
 def get_item(item_id: int):
     try:
-        item = db_stub.GetItem(database_pb2.GetItemRequest(item_id=item_id))
+        item = _grpc_read_call(product_stubs, "GetItem", database_pb2.GetItemRequest(item_id=item_id))
         return {
             "item_id": item.item_id,
             "item_name": item.item_name,
@@ -133,11 +180,11 @@ def add_to_cart(data: AddToCartModel, x_session_id: str = Header(None)):
     user_id, _ = verify_session(x_session_id)
     # Check availability first
     try:
-        item = db_stub.GetItem(database_pb2.GetItemRequest(item_id=data.item_id))
+        item = _grpc_call(product_stubs, "GetItem", database_pb2.GetItemRequest(item_id=data.item_id))
         if item.quantity < data.quantity:
             raise HTTPException(status_code=400, detail="Insufficient quantity available")
         
-        db_stub.AddToCart(database_pb2.AddToCartRequest(
+        _grpc_call(product_stubs, "AddToCart", database_pb2.AddToCartRequest(
             buyer_id=user_id, session_id=x_session_id, item_id=data.item_id, quantity=data.quantity
         ))
         return {"status": "success"}
@@ -147,7 +194,7 @@ def add_to_cart(data: AddToCartModel, x_session_id: str = Header(None)):
 @app.get("/buyer/cart")
 def display_cart(x_session_id: str = Header(None)):
     user_id, _ = verify_session(x_session_id)
-    resp = db_stub.ListCart(database_pb2.ListCartRequest(
+    resp = _grpc_call(product_stubs, "ListCart", database_pb2.ListCartRequest(
         buyer_id=user_id, session_id=x_session_id
     ))
     return {"cart": [{"item_id": i.item_id, "quantity": i.quantity} for i in resp.items]}
@@ -155,39 +202,39 @@ def display_cart(x_session_id: str = Header(None)):
 @app.post("/buyer/cart/save")
 def save_cart(x_session_id: str = Header(None)):
     user_id, _ = verify_session(x_session_id)
-    db_stub.SaveCart(database_pb2.SaveCartRequest(
+    _grpc_call(product_stubs, "SaveCart", database_pb2.SaveCartRequest(
         buyer_id=user_id, session_id=x_session_id
-    ))
-    return {"status": "success"}
-
-@app.delete("/buyer/cart/{item_id}")
-def remove_from_cart(item_id: int, x_session_id: str = Header(None)):
-    user_id, _ = verify_session(x_session_id)
-    db_stub.RemoveFromCart(database_pb2.RemoveFromCartRequest(
-        buyer_id=user_id, session_id=x_session_id, item_id=item_id
     ))
     return {"status": "success"}
 
 @app.delete("/buyer/cart/clear")
 def clear_cart(x_session_id: str = Header(None)):
     user_id, _ = verify_session(x_session_id)
-    db_stub.ClearCart(database_pb2.ClearCartRequest(
+    _grpc_call(product_stubs, "ClearCart", database_pb2.ClearCartRequest(
         buyer_id=user_id, session_id=x_session_id
     ))
-    db_stub.ClearSavedCart(database_pb2.ClearSavedCartRequest(buyer_id=user_id))
+    _grpc_call(product_stubs, "ClearSavedCart", database_pb2.ClearSavedCartRequest(buyer_id=user_id))
+    return {"status": "success"}
+
+@app.delete("/buyer/cart/{item_id}")
+def remove_from_cart(item_id: int, x_session_id: str = Header(None)):
+    user_id, _ = verify_session(x_session_id)
+    _grpc_call(product_stubs, "RemoveFromCart", database_pb2.RemoveFromCartRequest(
+        buyer_id=user_id, session_id=x_session_id, item_id=item_id
+    ))
     return {"status": "success"}
 
 @app.post("/buyer/feedback")
 def provide_feedback(data: FeedbackModel, x_session_id: str = Header(None)):
     user_id, _ = verify_session(x_session_id)
-    db_stub.ProvideFeedback(database_pb2.ProvideFeedbackRequest(
+    _grpc_call(product_stubs, "ProvideFeedback", database_pb2.ProvideFeedbackRequest(
         item_id=data.item_id, buyer_id=user_id, is_positive=data.is_positive
     ))
     return {"status": "success"}
 
 @app.get("/seller/{seller_id}/rating")
 def get_seller_rating(seller_id: int):
-    resp = db_stub.GetSellerRating(database_pb2.GetSellerRatingRequest(seller_id=seller_id))
+    resp = _grpc_call(customer_stubs, "GetSellerRating", database_pb2.GetSellerRatingRequest(seller_id=seller_id))
     total = resp.pos + resp.neg
     rating = float(resp.pos) / total if total > 0 else 0.0
     return {"rating": rating, "pos": int(resp.pos), "neg": int(resp.neg)}
@@ -195,7 +242,7 @@ def get_seller_rating(seller_id: int):
 @app.get("/buyer/purchases")
 def get_purchases(x_session_id: str = Header(None)):
     user_id, _ = verify_session(x_session_id)
-    resp = db_stub.GetPurchaseHistory(database_pb2.GetPurchaseHistoryRequest(buyer_id=user_id))
+    resp = _grpc_call(product_stubs, "GetPurchaseHistory", database_pb2.GetPurchaseHistoryRequest(buyer_id=user_id))
     return {"purchases": [{"item_id": r.item_id, "quantity": r.quantity, "date": r.purchased_at} for r in resp.records]}
 
 @app.post("/buyer/purchase")
@@ -217,7 +264,7 @@ def make_purchase(data: PurchaseModel, x_session_id: str = Header(None)):
     # else accept other formats (e.g., YYYY or YYYY-MM) without strict parsing
 
     # 1. Get saved cart (shared across sessions)
-    saved = db_stub.ListSavedCart(database_pb2.ListSavedCartRequest(buyer_id=user_id))
+    saved = _grpc_call(product_stubs, "ListSavedCart", database_pb2.ListSavedCartRequest(buyer_id=user_id))
     if not saved.items:
         raise HTTPException(status_code=400, detail="Cart not saved")
 
@@ -225,7 +272,7 @@ def make_purchase(data: PurchaseModel, x_session_id: str = Header(None)):
     items_to_buy = []
     for cart_item in saved.items:
         try:
-            item = db_stub.GetItem(database_pb2.GetItemRequest(item_id=cart_item.item_id))
+            item = _grpc_call(product_stubs, "GetItem", database_pb2.GetItemRequest(item_id=cart_item.item_id))
             if item.quantity < cart_item.quantity:
                 raise HTTPException(status_code=400, detail=f"Item {cart_item.item_id} out of stock")
             items_to_buy.append((item, cart_item.quantity))
@@ -238,7 +285,7 @@ def make_purchase(data: PurchaseModel, x_session_id: str = Header(None)):
         soap_client = SoapClient(FINANCIAL_SERVICE_WSDL)
         success = soap_client.service.AuthorizePayment(
             username=data.name,
-            card_number=data.card_number,
+            credit_card_number=data.card_number,
             expiration_date=data.expiration_date,
             security_code=data.security_code
         )
@@ -252,17 +299,13 @@ def make_purchase(data: PurchaseModel, x_session_id: str = Header(None)):
 
     # 4. Finalize Purchase
     for item, qty in items_to_buy:
-        # Deduct quantity
-        db_stub.UpdateItemQuantity(database_pb2.UpdateItemQuantityRequest(
-            item_id=item.item_id, seller_id=item.seller_id, quantity_delta=qty
-        ))
-        # Create purchase record
-        db_stub.CreatePurchase(database_pb2.CreatePurchaseRequest(
+        # CreatePurchase applies the stock decrement inside the replicated product store.
+        _grpc_call(product_stubs, "CreatePurchase", database_pb2.CreatePurchaseRequest(
             buyer_id=user_id, item_id=item.item_id, quantity=qty
         ))
         
     # 5. Clear saved cart
-    db_stub.ClearSavedCart(database_pb2.ClearSavedCartRequest(buyer_id=user_id))
+    _grpc_call(product_stubs, "ClearSavedCart", database_pb2.ClearSavedCartRequest(buyer_id=user_id))
     
     return {"status": "success", "message": "Purchase completed successfully"}
 
